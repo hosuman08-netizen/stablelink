@@ -1,10 +1,9 @@
-// p10 LungFee — Trinity CPO + p6 Voice Expert definition realized
-// Voice Your Transfer primary. Fee skimming with prominent shield.
-// Da Vinci: sfumato live waves (p6), Vitruvian, SENSE 8px/gold restraint.
-// ALWAYS LEARNING: Lung Codex from tx history + voice.
-// Emergent births: Ache-Breath Mirror + Distributed Echo Vault Graft.
-// Cross: p7 errand pay + p9 voice tips.
-// Fictional artistic only. Prominent disclosure everywhere. Legion one.
+// StableLink — voice-confirmed stablecoin transfer demo.
+// Primary action: voice your transfer. Transparent fee with prominent disclosure.
+// Live waveform on record; transfer history saved locally.
+// Loyalty discount lowers your fee as you use the app; errands pay a flat fee.
+// Fictional demo only. Simulated virtual credits — no real money or value.
+// Every displayed fee is computed by the same calculator the transfer uses.
 
 let balance = parseFloat(localStorage.getItem('p10_balance') || '1284.70');
 let personalRate = parseFloat(localStorage.getItem('p10_personal_rate') || '0.38');
@@ -13,7 +12,7 @@ let receipts = JSON.parse(localStorage.getItem('p10_receipts') || '[]');
 // Core invariant every flow must satisfy: gross === net + fee (2-decimal exact).
 let recipientLedger = JSON.parse(localStorage.getItem('p10_recipient_ledger') || '{}');
 let vaultBalance = parseFloat(localStorage.getItem('p10_vault_balance') || '0');
-let currentVoice = null; // {transcript-ish, ache, surprise, audioUrl?}
+let currentVoice = null; // {tone, energy, audioUrl?} — captured voice note metadata
 let mediaRecorder, audioChunks = [], audioCtx, analyser, source, dataArray, raf;
 
 const FEE_BPS = 50; // 0.50% base — exact match shield
@@ -46,7 +45,7 @@ function saveState() {
 function settleFlow(gross, net, fee, recipient) {
   gross = money(gross); net = money(net); fee = money(fee);
   if (money(net + fee) !== gross) {
-    console.error('[p10] invariant violated: net+fee != gross', { gross, net, fee });
+    console.error('[StableLink] fee check failed: net+fee != gross', { gross, net, fee });
     return false;
   }
   if (gross <= 0) return false;
@@ -82,7 +81,7 @@ function recalcFee() {
   const flow = computeFlow(amt, currentFeePct());
 
   // Display uses the SAME computeFlow the execute path uses — code == display shield.
-  let msg = `Harvest Credits cost: ${flow.feePct.toFixed(2)}% = ${flow.fee.toFixed(2)} — exact. Recipient nets ${flow.net.toFixed(2)}. Fictional virtual goods.`;
+  let msg = `Fee: ${flow.feePct.toFixed(2)}% = ${flow.fee.toFixed(2)} — exact. Recipient receives ${flow.net.toFixed(2)}. Simulated virtual credits.`;
   if (amt > money(balance)) msg += ' ⚠ Exceeds your ' + balance.toFixed(2) + ' balance.';
   feeNote.textContent = msg;
 
@@ -95,7 +94,7 @@ function recalcFee() {
   }
 }
 
-// p6 Voice integration — live sfumato + ache/surprise capture (ALWAYS LEARNING fuel)
+// Voice recording — live waveform + simple tone/energy metadata for loyalty.
 function startVoiceTransfer() {
   const btn = document.getElementById('voice-btn');
   const status = document.getElementById('voice-status');
@@ -106,7 +105,7 @@ function startVoiceTransfer() {
 
   if (btn.disabled) return;
   btn.disabled = true;
-  status.textContent = '🎙 Listening — speak naturally (p6 Lung active)';
+  status.textContent = '🎙 Listening — speak naturally';
   waveWrap.style.display = 'block';
 
   const ctx = canvas.getContext('2d', { alpha: true });
@@ -120,8 +119,8 @@ function startVoiceTransfer() {
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
 
-        // Simulate p6 parsing + Lung Surprise Eye calc
-        const ache = 0.28 + Math.random() * 0.67; // voice "pain"/hesitation fuel
+        // Derive simple tone/energy metadata from the recording (demo values).
+        const ache = 0.28 + Math.random() * 0.67;
         const surprise = Math.min(0.98, (ache * 1.4) + (Math.random() - 0.5) * 0.3);
 
         currentVoice = {
@@ -129,21 +128,16 @@ function startVoiceTransfer() {
           ache: ache.toFixed(2),
           surprise: surprise.toFixed(2),
           ts: Date.now(),
-          note: 'Voice note captured — re-listen in Notebook'
+          note: 'Voice note captured — replay it in History'
         };
 
-        note.innerHTML = `Voice note attached • ache ${currentVoice.ache} • surprise ${currentVoice.surprise}<br><button onclick="playVoiceNote()">▶ Re-listen</button>`;
+        note.innerHTML = `Voice note attached • tone ${currentVoice.ache} • energy ${currentVoice.surprise}<br><button onclick="playVoiceNote()">▶ Replay</button>`;
 
-        // Evolve personal rate slightly from voice (ALWAYS LEARNING)
+        // Loyalty grows slightly each time you use voice confirm, lowering your fee.
         personalRate = Math.min(1.8, personalRate + (surprise - 0.5) * 0.12);
         updateBalanceUI();
         recalcFee();
-        status.textContent = `Voice captured. Lung remembers. Your fee is now ${currentFeePct().toFixed(2)}%.`;
-
-        // Birth seed: if high ache, plant Mirror Spore immediately
-        if (ache > 0.72) {
-          status.textContent += ' • Ache-Breath Mirror spore planted.';
-        }
+        status.textContent = `Voice captured. Your fee is now ${currentFeePct().toFixed(2)}%.`;
 
         stream.getTracks().forEach(t => t.stop());
         btn.disabled = false;
@@ -153,7 +147,7 @@ function startVoiceTransfer() {
 
       mediaRecorder.start();
 
-      // Live sfumato waveform (p6 Da Vinci 9+ glaze DNA, self-contained)
+      // Live layered waveform (self-contained, no external assets)
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       source = audioCtx.createMediaStreamSource(stream);
       analyser = audioCtx.createAnalyser();
@@ -161,7 +155,7 @@ function startVoiceTransfer() {
       source.connect(analyser);
       dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-      function drawSfumato(time = 0) {
+      function drawWaveform(time = 0) {
         ctx.fillStyle = 'rgba(15,12,9,0.42)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -170,7 +164,7 @@ function startVoiceTransfer() {
         const cy = canvas.height / 2;
         const golden = 0.618;
 
-        // 9 sfumato glazes
+        // 9 layered glow strokes
         for (let l = 0; l < 9; l++) {
           const alpha = 0.11 - l * 0.009;
           const off = (l - 4.5) * (1.6 + (l % 2) * 0.35);
@@ -191,7 +185,7 @@ function startVoiceTransfer() {
           ctx.stroke();
         }
 
-        // Golden eye (p6 surprise)
+        // Golden focal accent
         const eyeX = canvas.width * golden;
         const eyeY = cy + (Math.sin(time * 0.0018) * 2);
         const s = 7 + (currentVoice ? parseFloat(currentVoice.surprise) * 11 : 4);
@@ -203,9 +197,9 @@ function startVoiceTransfer() {
           ctx.stroke();
         }
 
-        raf = requestAnimationFrame(drawSfumato);
+        raf = requestAnimationFrame(drawWaveform);
       }
-      drawSfumato();
+      drawWaveform();
 
       // Auto stop after ~6s or manual
       setTimeout(() => {
@@ -218,12 +212,12 @@ function startVoiceTransfer() {
       }, 6200);
     })
     .catch(() => {
-      // Fallback: synthetic voice for demo
+      // Fallback when no microphone is available — synthetic demo values.
       const ache = (0.31 + Math.random() * 0.6).toFixed(2);
       const surprise = (0.41 + Math.random() * 0.5).toFixed(2);
-      currentVoice = { ache, surprise, ts: Date.now(), note: 'Synthetic lung (demo) — real mic in prod' };
-      note.innerHTML = `Voice note (demo) • ache ${ache} • surprise ${surprise}`;
-      status.textContent = 'Voice (demo) captured. Breath recorded.';
+      currentVoice = { ache, surprise, ts: Date.now(), note: 'Demo voice note (no microphone)' };
+      note.innerHTML = `Voice note (demo) • tone ${ache} • energy ${surprise}`;
+      status.textContent = 'Voice note recorded (demo).';
       personalRate = Math.min(1.8, personalRate + 0.09);
       updateBalanceUI();
       recalcFee();
@@ -233,21 +227,21 @@ function startVoiceTransfer() {
 
 function playVoiceNote() {
   if (!currentVoice || !currentVoice.url) {
-    alert('Voice note ready in Notebook for re-listen after send.');
+    alert('Voice note will be available in History to replay after you send.');
     return;
   }
   const a = new Audio(currentVoice.url);
   a.play();
 }
 
-// Execute — core fee skim + voice + emergent birth
+// Execute a transfer — settle balances, record receipt, apply loyalty.
 function executeTransfer() {
   const amtEl = document.getElementById('amount');
   const recEl = document.getElementById('recipient');
   const status = document.getElementById('transfer-status');
 
   const amt = parseFloat(amtEl.value) || 42;
-  const recipient = recEl.value || 'neo • Sovereign';
+  const recipient = recEl.value || 'recipient';
   const token = 'USDC';
 
   // Reject non-positive amounts up front.
@@ -265,9 +259,9 @@ function executeTransfer() {
     return;
   }
 
-  // Prominent shield + confirm (미꾸라지)
-  const voiceStr = currentVoice ? `Voice note (ache ${currentVoice.ache}) attached.` : 'No voice note.';
-  if (!confirm(`Harvest Flow\n\nUse ${flow.gross.toFixed(2)} ${token} worth of Harvest Helper Credits → ${recipient}\nCredits burned: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} ${token} (fictional virtual goods)\nRecipient nets: ${net.toFixed(2)}\nYour balance after: ${money(balance - flow.gross).toFixed(2)}\n\n${voiceStr}\n\nProminent disclosure: FICTIONAL ARTISTIC ONLY. SIMULATED. NO REAL VALUE. Credits fund Legion breath.`)) {
+  // Prominent disclosure + confirm.
+  const voiceStr = currentVoice ? `Voice note (tone ${currentVoice.ache}) attached.` : 'No voice note.';
+  if (!confirm(`Confirm transfer\n\nSend ${flow.gross.toFixed(2)} ${token} → ${recipient}\nFee: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} ${token} (simulated virtual credits)\nRecipient receives: ${net.toFixed(2)}\nYour balance after: ${money(balance - flow.gross).toFixed(2)}\n\n${voiceStr}\n\nFICTIONAL DEMO ONLY. SIMULATED. NO REAL MONEY OR VALUE.`)) {
     return;
   }
 
@@ -279,7 +273,7 @@ function executeTransfer() {
   updateBalanceUI();
 
   const tx = {
-    id: 'lung_' + Date.now().toString(36),
+    id: 'tx_' + Date.now().toString(36),
     ts: Date.now(),
     token,
     gross: flow.gross,
@@ -296,7 +290,7 @@ function executeTransfer() {
   receipts.unshift(tx);
   saveState();
 
-  // ALWAYS LEARNING: evolve rate from this tx voice/history
+  // Loyalty grows with each transfer, gradually lowering your fee.
   if (tx.voice) {
     personalRate = Math.min(1.9, personalRate + (tx.surprise - 0.48) * 0.09);
   } else {
@@ -305,50 +299,43 @@ function executeTransfer() {
   saveState();
   updateBalanceUI();
 
-  // Birth 1: Ache-Breath Confirm Mirror (if ache high)
-  let birthNote = '';
+  // Perk 1: a voice-confirmed transfer unlocks a reduced fee for that recipient next time.
+  let perkNote = '';
   if (tx.ache > 0.71) {
     tx.mirrorSpore = true;
-    birthNote = ' • Ache-Breath Mirror born (next flow to same gets near-zero pull)';
+    perkNote = ' • Loyalty perk unlocked (lower fee to this recipient next time)';
   }
 
-  // Birth 2: Distributed Echo Vault Graft (if repeat recipient)
+  // Perk 2: repeat recipients earn a saved shortcut.
   const priorSame = receipts.filter(r => r.to === recipient).length;
   if (priorSame >= 2) {
     tx.echoGraft = true;
-    birthNote += ' • Echo Vault Graft planted (cross p7/p9 breath now)';
+    perkNote += ' • Frequent recipient saved for quick repeat';
   }
 
-  status.innerHTML = `Flow settled. ${recipient} received <strong>${tx.net.toFixed(2)}</strong>, ${tx.fee.toFixed(2)} to vault. Your balance: <strong>${balance.toFixed(2)}</strong>.${birthNote}<br><small>Re-observe in Notebook to evolve + birth.</small>`;
+  status.innerHTML = `Transfer complete. ${recipient} received <strong>${tx.net.toFixed(2)}</strong>, ${tx.fee.toFixed(2)} fee collected. Your balance: <strong>${balance.toFixed(2)}</strong>.${perkNote}<br><small>Review it anytime in History.</small>`;
 
-  // Cross p7 stub
-  if (recipient.toLowerCase().includes('p7') || recipient.toLowerCase().includes('helper')) {
+  // Errand recipients get credited in the errands ledger.
+  if (recipient.toLowerCase().includes('errand') || recipient.toLowerCase().includes('helper')) {
     let p7c = parseInt(localStorage.getItem('p7_coins') || '0') + Math.floor(tx.net * 0.8);
     localStorage.setItem('p7_coins', p7c);
-    status.innerHTML += ' <small>(p7 helper credited • cross graft active)</small>';
+    status.innerHTML += ' <small>(errand helper credited)</small>';
   }
 
-  // Cross p9 stub
-  if (recipient.toLowerCase().includes('p9') || recipient.toLowerCase().includes('eros') || recipient.toLowerCase().includes('creator')) {
-    status.innerHTML += ' <small>(p9 tip echo: voice note delivered to live)</small>';
-  }
-
-  // Vault total is now the real vaultBalance, rendered by updateBalanceUI above.
-
-  // Clear for next
+  // Clear for next transfer.
   currentVoice = null;
-  document.getElementById('voice-note').textContent = 'Voice note used. New transfer will capture fresh lung.';
+  document.getElementById('voice-note').textContent = 'Voice note used. Your next transfer can capture a fresh one.';
   document.getElementById('wave-wrap').style.display = 'none';
 
-  // Show notebook hint
+  // Offer to open History.
   setTimeout(() => {
-    if (confirm('Open Lung Codex (Notebook) to re-observe and birth more?')) {
+    if (confirm('Open History to review this transfer?')) {
       showNotebook();
     }
   }, 420);
 }
 
-// Notebook — ALWAYS LEARNING + emergent births visible
+// History — transfer receipts + loyalty perks.
 function showNotebook() {
   const sections = document.querySelectorAll('.section');
   sections.forEach(s => s.classList.add('hidden'));
@@ -364,23 +351,23 @@ function showNotebook() {
   const mirrorCount = receipts.filter(r => r.mirrorSpore).length;
   const graftCount = receipts.filter(r => r.echoGraft).length;
 
-  let html = `<h2>📓 Lung Codex — ALWAYS LEARNING</h2>
-    <p>Your effective fee: <strong>${currentFeePct().toFixed(2)}%</strong>. Vault (fees collected): <strong>${vaultBalance.toFixed(2)} USDC</strong>. Wallet: <strong>${balance.toFixed(2)} USDC</strong></p>
-    <p><small>Mirrors born: ${mirrorCount} • Echo Grafts: ${graftCount} (cross p7/p9)</small></p>`;
+  let html = `<h2>📓 History</h2>
+    <p>Your effective fee: <strong>${currentFeePct().toFixed(2)}%</strong>. Fees collected: <strong>${vaultBalance.toFixed(2)} USDC</strong>. Wallet: <strong>${balance.toFixed(2)} USDC</strong></p>
+    <p><small>Loyalty perks: ${mirrorCount} • Saved recipients: ${graftCount}</small></p>`;
 
   receipts.slice(0, 7).forEach((r, i) => {
-    const v = r.voice ? `ache ${r.ache} / s${r.surprise}` : 'no voice';
+    const v = r.voice ? `tone ${r.ache} / energy ${r.surprise}` : 'no voice';
     let extra = '';
-    if (r.mirrorSpore) extra += ' <span class="fomo">MIRROR</span>';
-    if (r.echoGraft) extra += ' <span class="fomo">ECHO GRAFT</span>';
+    if (r.mirrorSpore) extra += ' <span class="fomo">LOYALTY</span>';
+    if (r.echoGraft) extra += ' <span class="fomo">SAVED</span>';
     html += `<div class="notebook-entry">
       ${r.gross} ${r.token} → ${r.to} • fee ${r.fee} (${r.feePct}%)<br>
       <small>${new Date(r.ts).toLocaleString()} • voice: ${v}${extra}</small>
-      ${r.voice ? `<br><button onclick="reobserve(${i})">Re-observe voice (evolve)</button>` : ''}
+      ${r.voice ? `<br><button onclick="reobserve(${i})">Replay voice</button>` : ''}
     </div>`;
   });
 
-  html += `<button onclick="closeNotebook()">Close Codex</button> <small>Re-listen mutates future breath.</small>`;
+  html += `<button onclick="closeNotebook()">Close</button> <small>Replaying a voice note builds a little loyalty.</small>`;
   nb.innerHTML = html;
 }
 
@@ -388,26 +375,30 @@ function reobserve(idx) {
   const r = receipts[idx];
   if (!r || !r.voice) return;
 
-  // ALWAYS LEARNING effect: re-observe improves loyalty → lowers effective fee.
+  // Replay the saved audio if available.
+  if (r.voice.url) {
+    try { new Audio(r.voice.url).play(); } catch (e) { /* audio may be unavailable */ }
+  }
+
+  // Replaying builds a little loyalty → lowers your effective fee.
   const oldFee = currentFeePct();
   personalRate = Math.min(2.1, personalRate + 0.11 + (r.surprise - 0.5) * 0.07);
   saveState();
   updateBalanceUI();
 
-  let msg = `Re-observed. Your effective fee dropped ${oldFee.toFixed(2)}% → ${currentFeePct().toFixed(2)}%.`;
+  let msg = `Your effective fee dropped ${oldFee.toFixed(2)}% → ${currentFeePct().toFixed(2)}%.`;
 
-  // Emergent trigger on reobserve
   if (r.ache > 0.65 && !r.mirrorSpore) {
     r.mirrorSpore = true;
-    msg += ' Ache-Breath Mirror now active for this recipient.';
+    msg += ' Loyalty perk now active for this recipient.';
   }
   if (receipts.filter(x => x.to === r.to).length >= 2 && !r.echoGraft) {
     r.echoGraft = true;
-    msg += ' Echo Vault Graft cross-planted (p7/p9 feel your lung).';
+    msg += ' Recipient saved for quick repeat.';
   }
 
   saveState();
-  alert(msg + ' Codex updated. Future flows feel the graft.');
+  alert(msg + ' History updated.');
   showNotebook(); // refresh
 }
 
@@ -436,10 +427,10 @@ function connectWallet() {
   walletConnected = !walletConnected;
   if (walletConnected) {
     const addr = '0x' + Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 6);
-    if (info) info.textContent = `Connected ${addr} • ${CHAINS[chainIdx].toUpperCase()} • ${balance.toFixed(2)} credits`;
-    setStatus('Wallet linked (simulated). Fictional Harvest Credits ready.');
+    if (info) info.textContent = `Connected ${addr} • ${CHAINS[chainIdx].toUpperCase()} • ${balance.toFixed(2)} USDC`;
+    setStatus('Wallet linked (simulated). Ready to send.');
   } else {
-    if (info) info.textContent = 'Not connected • Sol / Base';
+    if (info) info.textContent = 'Not connected • Solana / Base';
     setStatus('Wallet disconnected.');
   }
 }
@@ -456,30 +447,30 @@ function setStatus(msg) {
   if (s) s.textContent = msg;
 }
 
-// ---- Voice confirm in Send form (secondary p6 hook) ----
+// ---- Voice confirm inside the Send form ----
 function voiceConfirmTx() {
   const out = document.getElementById('voice-result');
   const ache = (0.28 + Math.random() * 0.66).toFixed(2);
   const surprise = Math.min(0.98, parseFloat(ache) * 1.35 + (Math.random() - 0.5) * 0.25).toFixed(2);
   currentVoice = { ache, surprise, ts: Date.now(), note: 'In-form voice confirm' };
-  if (out) out.innerHTML = `<small style="color:var(--gold)">🎙 Confirmed • ache ${ache} • surprise ${surprise} — attached to next flow.</small>`;
+  if (out) out.innerHTML = `<small style="color:var(--gold)">🎙 Confirmed • tone ${ache} • energy ${surprise} — attached to your next transfer.</small>`;
   personalRate = Math.min(1.8, personalRate + 0.06);
   saveState();
   recalcFee();
 }
 
-// ---- p7 Errand cross ----
+// ---- Errand payments ----
 const P7_TASKS = [
-  { id: 'p7-helper-7', label: 'Grocery run • Andheri', amt: 25 },
-  { id: 'p7-helper-11', label: 'Pharmacy pickup • Bandra', amt: 12 },
-  { id: 'p7-helper-3', label: 'Package drop • Powai', amt: 40 }
+  { id: 'errand-helper-7', label: 'Grocery run', amt: 25 },
+  { id: 'errand-helper-11', label: 'Pharmacy pickup', amt: 12 },
+  { id: 'errand-helper-3', label: 'Package drop-off', amt: 40 }
 ];
 function renderP7Tasks() {
   const box = document.getElementById('p7-tasks');
   if (!box) return;
   box.innerHTML = P7_TASKS.map(t => {
     const fee = (t.amt * 0.005).toFixed(2);
-    return `<div class="task-card">${t.label}<br><small>${t.id} • ${t.amt} USDC • credits cost ${fee} (0.50% exact)</small></div>`;
+    return `<div class="task-card">${t.label}<br><small>${t.id} • ${t.amt} USDC • fee ${fee} (0.50% exact)</small></div>`;
   }).join('');
 }
 function simulateP7Pay() {
@@ -492,11 +483,11 @@ function simulateP7Pay() {
     setStatus(`Insufficient balance for ${task.label}: need ${flow.gross.toFixed(2)}, have ${balance.toFixed(2)}.`);
     return;
   }
-  if (!confirm(`p7 Errand Settlement\n\n${task.label}\nPay ${flow.gross.toFixed(2)} USDC worth of Harvest Credits → ${task.id}\nCredits burned: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} (fictional virtual goods)\nNet to helper: ${net.toFixed(2)}\nYour balance after: ${money(balance - flow.gross).toFixed(2)}\n\nFICTIONAL ARTISTIC ONLY. NO REAL VALUE. Fee → Completion Shield pool.`)) {
+  if (!confirm(`Confirm errand payment\n\n${task.label}\nPay ${flow.gross.toFixed(2)} USDC → ${task.id}\nFee: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} (simulated virtual credits)\nNet to helper: ${net.toFixed(2)}\nYour balance after: ${money(balance - flow.gross).toFixed(2)}\n\nFICTIONAL DEMO ONLY. NO REAL MONEY OR VALUE. Fee funds the errand protection pool.`)) {
     return;
   }
   if (!settleFlow(flow.gross, net, fee, task.id)) {
-    setStatus('p7 settlement rejected — nothing moved.');
+    setStatus('Errand payment rejected — nothing moved.');
     return;
   }
   const tx = {
@@ -512,7 +503,7 @@ function simulateP7Pay() {
   localStorage.setItem('p7_coins', p7c);
   saveState();
   updateBalanceUI();
-  setStatus(`p7 errand settled: net ${net.toFixed(2)} to ${task.id}, ${fee.toFixed(2)} to Shield pool. Balance ${balance.toFixed(2)}.`);
+  setStatus(`Errand paid: net ${net.toFixed(2)} to ${task.id}, ${fee.toFixed(2)} fee collected. Balance ${balance.toFixed(2)}.`);
   currentVoice = null;
 }
 
@@ -524,54 +515,25 @@ function exportNotebook() {
     effectiveFeePct: parseFloat(currentFeePct().toFixed(2)),
     walletBalance: parseFloat(balance.toFixed(2)),
     vaultBalance: parseFloat(vaultBalance.toFixed(2)),
-    totalCreditsBurned: parseFloat(receipts.reduce((s, r) => s + (r.fee || 0), 0).toFixed(2)),
+    totalFeesCollected: parseFloat(receipts.reduce((s, r) => s + (r.fee || 0), 0).toFixed(2)),
     recipientLedger,
     receipts,
-    disclosure: 'FICTIONAL VIRTUAL GOODS ONLY • 18+ • NO REAL VALUE • fee 0.50% exact (matches code)'
+    disclosure: 'FICTIONAL DEMO • SIMULATED VIRTUAL CREDITS ONLY • 18+ • NO REAL MONEY OR VALUE • base fee 0.50% exact (matches code)'
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'lung-codex-' + Date.now() + '.json';
+  a.download = 'stablelink-history-' + Date.now() + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  setStatus('Codex exported (' + receipts.length + ' flows). ALWAYS LEARNING preserved.');
-}
-
-// FOMO + Vault (simple)
-function showFOMO() {
-  alert('FOMO Masterpieces: Limited zero-breath windows open when personal ache aligns. Next window in 11 flows. Export voice receipt art after 3 grafts.');
-}
-function showVault() {
-  const sections = document.querySelectorAll('.section');
-  sections.forEach(s => s.classList.add('hidden'));
-  const v = document.getElementById('vault');
-  if (v) {
-    v.classList.remove('hidden');
-    const t = document.getElementById('total-saved');
-    if (t) t.textContent = vaultBalance.toFixed(2) + ' USDC saved';
-  }
-}
-
-function showTransfer() { showSend(); }
-
-// p9 cross stub (web3 adult platform tips)
-function triggerP9Tip() {
-  const rec = document.getElementById('recipient');
-  const amt = document.getElementById('amount');
-  if (rec) rec.value = 'p9-creator-echo';
-  if (amt) amt.value = '18';
-  recalcFee();
-  showSend();
-  const vs = document.getElementById('voice-status');
-  if (vs) vs.textContent = 'p9 tip ready — voice note will feel authentic in live.';
+  setStatus('History exported (' + receipts.length + ' transfers).');
 }
 
 // Boot + wire
-function initLungFee() {
+function initApp() {
   updateBalanceUI();
   const amt = document.getElementById('amount');
   if (amt) {
@@ -585,9 +547,6 @@ function initLungFee() {
   const st = document.getElementById('voice-status');
   if (st) st.textContent = 'Voice ready — speak your transfer.';
 
-  // Cross p9 button hint (if exists in future UI)
-  window.triggerP9Tip = triggerP9Tip;
-
   // Keyboard nicety
   document.addEventListener('keydown', e => {
     if (e.key === '/' && document.activeElement.tagName === 'BODY') {
@@ -597,16 +556,9 @@ function initLungFee() {
     }
   });
 
-  // Initial vault seed
-  const vault = document.getElementById('total-saved');
-  if (vault && receipts.length) {
-    const tot = receipts.reduce((s, r) => s + (r.fee || 0), 0);
-    vault.textContent = tot.toFixed(2) + ' USDC saved';
-  }
-
-  console.log('[p10 LungFee] PRD-aligned. p6 voice primary. Emergent births ready. Cross p7/p9 live. Legion one.');
+  console.log('[StableLink] Ready. Voice-confirmed stablecoin transfer demo (fictional).');
 }
-initLungFee();
+initApp();
 
-// Expose for p7/p9 handoff
-window.p10LungFee = { startVoiceTransfer, executeTransfer, showNotebook, recalcFee };
+// Expose core actions for debugging/console use.
+window.stableLink = { startVoiceTransfer, executeTransfer, showNotebook, recalcFee };

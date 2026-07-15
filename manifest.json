@@ -1,7 +1,7 @@
 {
-  "name": "StableLink • Aether Rail",
+  "name": "StableLink — Voice Stablecoin Transfers",
   "short_name": "StableLink",
-  "description": "Web3 stablecoin fee rail. USDT/USDC transfers with invisible/value-add fee. p6 voice confirm + p7 errand pay. Fictional utility. Legion p10.",
+  "description": "A fictional demo of voice-confirmed stablecoin transfers with a transparent, exact fee. Simulated virtual credits only — no real money or value.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a1420",

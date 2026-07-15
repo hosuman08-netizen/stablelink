@@ -1,7 +1,6 @@
-/* p10 StableLink — Da Vinci + SENSE + Legion DNA
-   Sfumato soft + Vitruvian proportion + 8px grid + 60/30/10
-   주인공 하나 (Send) • 여백 = 자신감 • prominent fee shield
-   p6 lung eye + p7 cross ready. No hard edges. */
+/* StableLink — voice stablecoin transfer demo
+   Soft gradients, 8px grid, one gold protagonist action (Send).
+   Generous whitespace, prominent fee disclosure. No hard edges. */
 
 :root {
   --bg: #0a1420;
@@ -131,8 +130,66 @@ h2 { font-size: 17px; margin: 0 0 10px; color: var(--gold); }
 
 .hidden { display: none !important; }
 
-/* Da Vinci / SENSE — sfumato soft, vitruvian harmony, restraint */
-#lung-canvas {
+/* History entries */
+.notebook-entry {
+  background: var(--card);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(197,164,110,0.12);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.notebook-entry button {
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid rgba(167,139,250,0.5);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Perk badges */
+.fomo {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: #0a1420;
+  background: var(--gold);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* Settings rows */
+.setting {
+  background: var(--card);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(197,164,110,0.15);
+  margin-bottom: 10px;
+}
+.setting label {
+  display: block;
+  font-size: 12px;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+.setting div { font-size: 13px; color: var(--text); }
+#settings button {
+  margin-top: 8px;
+  background: var(--card);
+  border: 1px solid rgba(197,164,110,0.3);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Soft canvas panel for the history chart */
+#history-canvas {
   background: #0a1420;
   border: 1px solid rgba(197,164,110,0.2);
   box-shadow: 0 2px 12px rgba(0,0,0,0.3);
@@ -145,7 +202,7 @@ button:focus, input:focus { border-color: var(--gold); outline: none; box-shadow
 /* Fee is visible but never loud */
 #fee-note { color: var(--gold); font-weight: 500; }
 
-/* Embodiment glow on receipts */
+/* Subtle glow on receipts */
 .receipt:hover { border-color: var(--gold); }
 
 /* Mobile first, one-thumb friendly */
