@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StableLink • Aether Rail</title>
+  <meta name="description" content="스테이블 수수료 레일. USDC/USDT 전송 수수료 캡처. p6 Voice 확인 • p7 심부름 결제. Fictional utility. Legion p10.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0a1420">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="disclaimer">FICTIONAL VIRTUAL HARVEST HELPER CREDITS ONLY • 18+ • NO REAL VALUE • NOT BANK/REMITTANCE • LEGION p10 × p6 × p7 • EXACT CREDIT COST SHOWN</div>
+      <h1>StableLink</h1>
+      <p class="tagline">가치가 숨처럼 흐른다 • Voice로 확인하고 안정적으로</p>
+
+      <div class="wallet">
+        <button onclick="connectWallet()">🔗 Connect Wallet</button>
+        <div id="wallet-info">Not connected • Sol / Base</div>
+        <button onclick="switchChain()" style="font-size:10px">Switch Chain</button>
+      </div>
+
+      <div class="nav">
+        <button onclick="showSend()">💸 Send Stable</button>
+        <button onclick="showNotebook()">📓 Lung Codex (ALWAYS LEARNING + births)</button>
+        <button onclick="showP7Cross()">🗺️ p7 Errand Pay</button>
+        <button onclick="showSettings()">⚙️ Settings</button>
+      </div>
+      <div id="status" class="status">Aether ready. Speak to confirm value.</div>
+
+      <!-- LungFee p6 Voice Hero (Trinity definition primary) -->
+      <button onclick="startVoiceTransfer()" class="voice-cta" style="width:100%;margin:10px 0;padding:14px;font-size:1.05rem;border:1px solid #c5a46e;background:#1f1a15;color:#c5a46e;border-radius:10px;">🎙 Voice Your Transfer (p6 Lung primary)</button>
+      <div id="voice-status" class="status"></div>
+      <div id="voice-note" style="font-size:0.8rem;opacity:0.8;margin-bottom:8px">No voice note yet — capture above.</div>
+      <div id="wave-wrap" style="display:none;background:#0a0806;border-radius:6px;padding:6px;margin-bottom:8px"><canvas id="voice-wave" width="620" height="78"></canvas></div>
+    </header>
+
+    <!-- Send -->
+    <div id="send" class="section">
+      <h2>Send Stable</h2>
+      <div class="form">
+        <label>Chain</label>
+        <select id="chain">
+          <option value="sol">Solana (fastest, lowest fee)</option>
+          <option value="base">Base (EVM)</option>
+        </select>
+
+        <label>Token</label>
+        <select id="token">
+          <option>USDC</option>
+          <option>USDT</option>
+        </select>
+
+        <label>Recipient (address or p7 id)</label>
+        <input id="recipient" placeholder="0x... or p7-helper-42" value="p7-helper-7">
+
+        <label>Amount</label>
+        <input id="amount" type="number" value="25" min="1" step="0.01">
+        <small id="fee-note">Harvest Credits cost: 0.50% — exact. Fictional virtual goods. Powers Aether security + p7 shield.</small>
+
+        <label>Voice Confirm (p6 Lung — optional but recommended)</label>
+        <button onclick="voiceConfirmTx()" class="voice-btn">🎙️ p6 Aether로 확인 말하기 (Lung Surprise Eye)</button>
+        <div id="voice-result"></div>
+
+        <button onclick="executeTransfer()" class="primary">Execute LungFee Voice Flow (exact fee shown)</button>
+        <div id="transfer-status" class="status"></div>
+        <small style="color:#8b6f47">Prominent: Exact Harvest Credits cost shown. Fictional virtual goods only. Reversible until sign.</small>
+      </div>
+    </div>
+
+    <!-- History / Notebook -->
+    <div id="history" class="section hidden">
+      <h2>Receipts + Lung Notebook</h2>
+      <div id="receipt-list" class="receipt-grid"></div>
+      <canvas id="lung-canvas" width="320" height="120" style="margin-top:12px;border-radius:8px;"></canvas>
+      <small>Sfumaoto glow = embodied memory. Every tx plants spore.</small>
+    </div>
+
+    <!-- p7 Cross -->
+    <div id="p7cross" class="section hidden">
+      <h2>p7 Errand — Pay in Stable</h2>
+      <div id="p7-tasks"></div>
+      <button onclick="simulateP7Pay()" class="primary">Complete errand → Pay net stable (0.5% fee)</button>
+      <small>Fee → Completion Shield pool (p7 protection). Voice confirm recommended.</small>
+    </div>
+
+    <!-- Settings -->
+    <div id="settings" class="section hidden">
+      <h2>Settings</h2>
+      <div class="setting">
+        <label>Fee BPS (internal, prominent always)</label>
+        <div>50 bps = 0.50% (exact, matches code + onchain)</div>
+      </div>
+      <div class="setting">
+        <label>Disclosure</label>
+        <div>Pre-tx • Confirm • History • Settings • Receipt — all identical 0.50%</div>
+      </div>
+      <div class="setting">
+        <label>미꾸라지 Shield</label>
+        <div>FICTIONAL UTILITY ONLY • NO REAL YIELD PROMISE • 18+ GATE ON P7 • REVERSIBLE PRE-BROADCAST</div>
+      </div>
+      <button onclick="exportNotebook()">Export Notebook (ALWAYS LEARNING)</button>
+    </div>
+  </div>
+
+  <script src="../p6-airpods-artistic/lung-surprise-eye.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
