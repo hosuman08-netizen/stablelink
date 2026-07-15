@@ -19,16 +19,16 @@
       <div class="wallet">
         <button onclick="connectWallet()">🔗 Connect Wallet</button>
         <div id="wallet-info">Not connected • Sol / Base</div>
-        <button onclick="switchChain()" style="font-size:10px">Switch Chain</button>
+        <button class="chain-btn" onclick="switchChain()">Switch chain</button>
       </div>
 
       <div class="nav">
-        <button onclick="showSend()">💸 Send Stable</button>
-        <button onclick="showNotebook()">📓 Lung Codex (ALWAYS LEARNING + births)</button>
-        <button onclick="showP7Cross()">🗺️ p7 Errand Pay</button>
-        <button onclick="showSettings()">⚙️ Settings</button>
+        <button onclick="showSend()">Send</button>
+        <button onclick="showNotebook()">Codex</button>
+        <button onclick="showP7Cross()">p7 Errand</button>
+        <button onclick="showSettings()">Settings</button>
       </div>
-      <div id="status" class="status">Aether ready. Speak to confirm value.</div>
+      <div id="status" class="status">Ready — speak to confirm your transfer.</div>
 
       <!-- LungFee p6 Voice Hero (Trinity definition primary) -->
       <button id="voice-btn" onclick="startVoiceTransfer()" class="voice-cta">🎙 Voice Your Transfer</button>
@@ -60,13 +60,13 @@
         <input id="amount" type="number" value="25" min="1" step="0.01">
         <small id="fee-note">Harvest Credits cost: 0.50% — exact. Fictional virtual goods. Powers Aether security + p7 shield.</small>
 
-        <label>Voice Confirm (p6 Lung — optional but recommended)</label>
-        <button onclick="voiceConfirmTx()" class="voice-btn">🎙️ p6 Aether로 확인 말하기 (Lung Surprise Eye)</button>
+        <label>Voice confirm (optional)</label>
+        <button onclick="voiceConfirmTx()" class="voice-btn">🎙️ Speak to confirm</button>
         <div id="voice-result"></div>
 
-        <button onclick="executeTransfer()" class="primary">Execute LungFee Voice Flow (exact fee shown)</button>
+        <button onclick="executeTransfer()" class="primary">Send transfer</button>
         <div id="transfer-status" class="status"></div>
-        <small style="color:#8b6f47">Prominent: Exact Harvest Credits cost shown. Fictional virtual goods only. Reversible until sign.</small>
+        <small style="color:var(--muted)">Exact Harvest Credits cost shown above. Fictional virtual goods only. Reversible until you sign.</small>
       </div>
     </div>
 

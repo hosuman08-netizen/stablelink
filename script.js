@@ -508,9 +508,9 @@ function initLungFee() {
   }
   recalcFee();
 
-  // p6 lung ready notice
+  // Voice ready notice
   const st = document.getElementById('voice-status');
-  if (st) st.textContent = 'p6 Lung connected. Voice is the transfer.';
+  if (st) st.textContent = 'Voice ready — speak your transfer.';
 
   // Cross p9 button hint (if exists in future UI)
   window.triggerP9Tip = triggerP9Tip;
