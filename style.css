@@ -50,6 +50,19 @@ h1 { margin: 4px 0 2px; font-size: 28px; letter-spacing: -0.5px; color: var(--go
 }
 .chain-btn { font-size: 12px; color: var(--muted); }
 
+.balance-card {
+  background: var(--card);
+  border: 1px solid rgba(197,164,110,0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.bal-main { display: flex; justify-content: space-between; align-items: baseline; }
+.bal-main .bal-label { color: var(--muted); font-size: 12px; }
+.bal-main strong { color: var(--gold); font-size: 22px; letter-spacing: -0.5px; }
+.bal-sub { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.bal-sub strong { color: var(--text); }
+
 .nav { display: flex; gap: 8px; margin-bottom: 16px; }
 .nav button {
   flex: 1;

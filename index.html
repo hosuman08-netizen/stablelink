@@ -28,6 +28,19 @@
         <button onclick="showP7Cross()">p7 Errand</button>
         <button onclick="showSettings()">Settings</button>
       </div>
+
+      <!-- Real balance card — wallet, vault (fees collected), effective fee -->
+      <div class="balance-card">
+        <div class="bal-main">
+          <span class="bal-label">Wallet</span>
+          <span><strong id="balance">0.00</strong> USDC</span>
+        </div>
+        <div class="bal-sub">
+          <span>Vault <strong id="vault-balance">0.00</strong></span>
+          <span>Your fee <strong id="personal-rate">0.50%</strong></span>
+        </div>
+      </div>
+
       <div id="status" class="status">Ready — speak to confirm your transfer.</div>
 
       <!-- LungFee p6 Voice Hero (Trinity definition primary) -->
@@ -58,7 +71,8 @@
 
         <label>Amount</label>
         <input id="amount" type="number" value="25" min="1" step="0.01">
-        <small id="fee-note">Harvest Credits cost: 0.50% — exact. Fictional virtual goods. Powers Aether security + p7 shield.</small>
+        <small id="fee-note">Harvest Credits cost recalculates below — exact, code-matched. Fictional virtual goods.</small>
+        <small id="recipient-received" style="color:var(--gold)"></small>
 
         <label>Voice confirm (optional)</label>
         <button onclick="voiceConfirmTx()" class="voice-btn">🎙️ Speak to confirm</button>
@@ -90,12 +104,12 @@
     <div id="settings" class="section hidden">
       <h2>Settings</h2>
       <div class="setting">
-        <label>Fee BPS (internal, prominent always)</label>
-        <div>50 bps = 0.50% (exact, matches code + onchain)</div>
+        <label>Fee (internal, prominent always)</label>
+        <div>Base 50 bps = 0.50%. Send flows apply a loyalty discount (min 0.04%); p7 errands flat 0.50%. Every number below comes from one shared calculator — display always equals what is charged.</div>
       </div>
       <div class="setting">
         <label>Disclosure</label>
-        <div>Pre-tx • Confirm • History • Settings • Receipt — all identical 0.50%</div>
+        <div>Pre-tx recalc • Confirm dialog • Receipt • Codex • Export — all show the identical fee actually charged (code == display).</div>
       </div>
       <div class="setting">
         <label>미꾸라지 Shield</label>
