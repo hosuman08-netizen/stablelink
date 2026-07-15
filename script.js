@@ -9,22 +9,63 @@
 let balance = parseFloat(localStorage.getItem('p10_balance') || '1284.70');
 let personalRate = parseFloat(localStorage.getItem('p10_personal_rate') || '0.38');
 let receipts = JSON.parse(localStorage.getItem('p10_receipts') || '[]');
+// Real ledger: per-recipient received totals + skim vault balance.
+// Core invariant every flow must satisfy: gross === net + fee (2-decimal exact).
+let recipientLedger = JSON.parse(localStorage.getItem('p10_recipient_ledger') || '{}');
+let vaultBalance = parseFloat(localStorage.getItem('p10_vault_balance') || '0');
 let currentVoice = null; // {transcript-ish, ache, surprise, audioUrl?}
 let mediaRecorder, audioChunks = [], audioCtx, analyser, source, dataArray, raf;
 
 const FEE_BPS = 50; // 0.50% base — exact match shield
 
+// Round to 2 decimals as integer cents to avoid float drift (0.1+0.2 problem).
+function money(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+// Single source of truth for a flow's numbers. Guarantees gross === net + fee exactly.
+// feePct is a percentage (e.g. 0.50 means 0.50%). Fee rounded to cents, net = gross - fee.
+function computeFlow(gross, feePct) {
+  gross = money(gross);
+  const fee = money(gross * (feePct / 100));
+  const net = money(gross - fee);
+  return { gross, fee, net, feePct: money(feePct) };
+}
+
 function saveState() {
   localStorage.setItem('p10_balance', balance.toFixed(2));
   localStorage.setItem('p10_personal_rate', personalRate.toFixed(2));
   localStorage.setItem('p10_receipts', JSON.stringify(receipts));
+  localStorage.setItem('p10_recipient_ledger', JSON.stringify(recipientLedger));
+  localStorage.setItem('p10_vault_balance', vaultBalance.toFixed(2));
+}
+
+// Atomic settlement: debit sender gross, credit recipient net, credit vault fee.
+// Returns false (no state change) if insufficient balance — core transfer correctness.
+// Enforces gross === net + fee before touching any balance.
+function settleFlow(gross, net, fee, recipient) {
+  gross = money(gross); net = money(net); fee = money(fee);
+  if (money(net + fee) !== gross) {
+    console.error('[p10] invariant violated: net+fee != gross', { gross, net, fee });
+    return false;
+  }
+  if (gross <= 0) return false;
+  if (gross > money(balance)) return false; // insufficient funds — reject, do not go negative
+  balance = money(balance - gross);
+  recipientLedger[recipient] = money((recipientLedger[recipient] || 0) + net);
+  vaultBalance = money(vaultBalance + fee);
+  return true;
 }
 
 function updateBalanceUI() {
   const b = document.getElementById('balance');
   if (b) b.textContent = balance.toFixed(2);
   const pr = document.getElementById('personal-rate');
-  if (pr) pr.textContent = personalRate.toFixed(2) + '%';
+  if (pr) pr.textContent = currentFeePct().toFixed(2) + '%';
+  const vb = document.getElementById('vault-balance');
+  if (vb) vb.textContent = vaultBalance.toFixed(2);
+  const ts = document.getElementById('total-saved');
+  if (ts) ts.textContent = vaultBalance.toFixed(2) + ' USDC saved';
 }
 
 // Exact fee the execute path will charge — single source of truth (shield: display == code).
@@ -38,10 +79,20 @@ function recalcFee() {
   if (!amtEl || !feeNote) return;
 
   const amt = parseFloat(amtEl.value) || 0;
-  const feePct = currentFeePct();
-  const fee = amt * (feePct / 100);
+  const flow = computeFlow(amt, currentFeePct());
 
-  feeNote.textContent = `Harvest Credits cost: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} — exact. Fictional virtual goods.`;
+  // Display uses the SAME computeFlow the execute path uses — code == display shield.
+  let msg = `Harvest Credits cost: ${flow.feePct.toFixed(2)}% = ${flow.fee.toFixed(2)} — exact. Recipient nets ${flow.net.toFixed(2)}. Fictional virtual goods.`;
+  if (amt > money(balance)) msg += ' ⚠ Exceeds your ' + balance.toFixed(2) + ' balance.';
+  feeNote.textContent = msg;
+
+  // Live preview of what this recipient has already received (transfer feels real).
+  const recEl = document.getElementById('recipient');
+  const prevEl = document.getElementById('recipient-received');
+  if (recEl && prevEl) {
+    const got = recipientLedger[recEl.value || ''] || 0;
+    prevEl.textContent = got > 0 ? `This recipient has received ${got.toFixed(2)} USDC so far.` : '';
+  }
 }
 
 // p6 Voice integration — live sfumato + ache/surprise capture (ALWAYS LEARNING fuel)
@@ -82,12 +133,12 @@ function startVoiceTransfer() {
         };
 
         note.innerHTML = `Voice note attached • ache ${currentVoice.ache} • surprise ${currentVoice.surprise}<br><button onclick="playVoiceNote()">▶ Re-listen</button>`;
-        status.textContent = 'Voice captured. Lung remembers. Fee now reflects your breath.';
 
         // Evolve personal rate slightly from voice (ALWAYS LEARNING)
         personalRate = Math.min(1.8, personalRate + (surprise - 0.5) * 0.12);
         updateBalanceUI();
         recalcFee();
+        status.textContent = `Voice captured. Lung remembers. Your fee is now ${currentFeePct().toFixed(2)}%.`;
 
         // Birth seed: if high ache, plant Mirror Spore immediately
         if (ache > 0.72) {
@@ -199,29 +250,44 @@ function executeTransfer() {
   const recipient = recEl.value || 'neo • Sovereign';
   const token = 'USDC';
 
-  const feePct = currentFeePct();
-  const fee = amt * (feePct / 100);
-  const net = amt - fee;
-
-  // Prominent shield + confirm (미꾸라지)
-  const voiceStr = currentVoice ? `Voice note (ache ${currentVoice.ache}) attached.` : 'No voice note.';
-  if (!confirm(`Harvest Flow\n\nUse ${amt} ${token} worth of Harvest Helper Credits → ${recipient}\nCredits burned: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} ${token} (fictional virtual goods)\nNet facilitation: ${net.toFixed(2)}\n\n${voiceStr}\n\nProminent disclosure: FICTIONAL ARTISTIC ONLY. SIMULATED. NO REAL VALUE. Credits fund Legion breath.`)) {
+  // Reject non-positive amounts up front.
+  if (!(amt > 0)) {
+    if (status) status.textContent = 'Enter an amount greater than 0.';
     return;
   }
 
-  // Skim
-  balance = Math.max(0, balance - amt);
+  const flow = computeFlow(amt, currentFeePct());
+  const { fee, net, feePct } = flow;
+
+  // Insufficient-funds guard — a transfer app must never overdraw or silently clamp.
+  if (flow.gross > money(balance)) {
+    if (status) status.textContent = `Insufficient balance: need ${flow.gross.toFixed(2)}, have ${balance.toFixed(2)} USDC.`;
+    return;
+  }
+
+  // Prominent shield + confirm (미꾸라지)
+  const voiceStr = currentVoice ? `Voice note (ache ${currentVoice.ache}) attached.` : 'No voice note.';
+  if (!confirm(`Harvest Flow\n\nUse ${flow.gross.toFixed(2)} ${token} worth of Harvest Helper Credits → ${recipient}\nCredits burned: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} ${token} (fictional virtual goods)\nRecipient nets: ${net.toFixed(2)}\nYour balance after: ${money(balance - flow.gross).toFixed(2)}\n\n${voiceStr}\n\nProminent disclosure: FICTIONAL ARTISTIC ONLY. SIMULATED. NO REAL VALUE. Credits fund Legion breath.`)) {
+    return;
+  }
+
+  // Atomic settlement: debit sender gross, credit recipient net, credit vault fee.
+  if (!settleFlow(flow.gross, net, fee, recipient)) {
+    if (status) status.textContent = 'Flow rejected (balance changed or invariant guard). Nothing moved.';
+    return;
+  }
   updateBalanceUI();
 
   const tx = {
     id: 'lung_' + Date.now().toString(36),
     ts: Date.now(),
     token,
-    gross: amt,
-    fee: parseFloat(fee.toFixed(2)),
-    feePct: parseFloat(feePct.toFixed(2)),
-    net: parseFloat(net.toFixed(2)),
+    gross: flow.gross,
+    fee,
+    feePct,
+    net,
     to: recipient,
+    recipientBalanceAfter: recipientLedger[recipient],
     voice: currentVoice ? { ...currentVoice } : null,
     ache: currentVoice ? parseFloat(currentVoice.ache) : 0.4,
     surprise: currentVoice ? parseFloat(currentVoice.surprise) : 0.5
@@ -253,7 +319,7 @@ function executeTransfer() {
     birthNote += ' • Echo Vault Graft planted (cross p7/p9 breath now)';
   }
 
-  status.innerHTML = `Flow executed. Net ${tx.net} skimmed ${tx.fee}. Lung spore saved.${birthNote}<br><small>Re-observe in Notebook to evolve + birth.</small>`;
+  status.innerHTML = `Flow settled. ${recipient} received <strong>${tx.net.toFixed(2)}</strong>, ${tx.fee.toFixed(2)} to vault. Your balance: <strong>${balance.toFixed(2)}</strong>.${birthNote}<br><small>Re-observe in Notebook to evolve + birth.</small>`;
 
   // Cross p7 stub
   if (recipient.toLowerCase().includes('p7') || recipient.toLowerCase().includes('helper')) {
@@ -267,12 +333,7 @@ function executeTransfer() {
     status.innerHTML += ' <small>(p9 tip echo: voice note delivered to live)</small>';
   }
 
-  // Update vault if visible
-  const vaultTotal = document.getElementById('total-saved');
-  if (vaultTotal) {
-    const totalSaved = receipts.reduce((s, r) => s + (r.fee || 0), 0);
-    vaultTotal.textContent = totalSaved.toFixed(2) + ' USDC saved';
-  }
+  // Vault total is now the real vaultBalance, rendered by updateBalanceUI above.
 
   // Clear for next
   currentVoice = null;
@@ -300,12 +361,11 @@ function showNotebook() {
   }
   nb.classList.remove('hidden');
 
-  const totalSaved = receipts.reduce((s, r) => s + (r.fee || 0), 0);
   const mirrorCount = receipts.filter(r => r.mirrorSpore).length;
   const graftCount = receipts.filter(r => r.echoGraft).length;
 
   let html = `<h2>📓 Lung Codex — ALWAYS LEARNING</h2>
-    <p>Personal breath rate: <strong>${personalRate.toFixed(2)}%</strong>. Total skim saved in lung: <strong>${totalSaved.toFixed(2)} USDC</strong></p>
+    <p>Your effective fee: <strong>${currentFeePct().toFixed(2)}%</strong>. Vault (fees collected): <strong>${vaultBalance.toFixed(2)} USDC</strong>. Wallet: <strong>${balance.toFixed(2)} USDC</strong></p>
     <p><small>Mirrors born: ${mirrorCount} • Echo Grafts: ${graftCount} (cross p7/p9)</small></p>`;
 
   receipts.slice(0, 7).forEach((r, i) => {
@@ -328,13 +388,13 @@ function reobserve(idx) {
   const r = receipts[idx];
   if (!r || !r.voice) return;
 
-  // ALWAYS LEARNING effect: re-observe improves rate + may birth
-  const oldRate = personalRate;
+  // ALWAYS LEARNING effect: re-observe improves loyalty → lowers effective fee.
+  const oldFee = currentFeePct();
   personalRate = Math.min(2.1, personalRate + 0.11 + (r.surprise - 0.5) * 0.07);
   saveState();
   updateBalanceUI();
 
-  let msg = `Re-observed. Breath evolved ${oldRate.toFixed(2)}% → ${personalRate.toFixed(2)}%.`;
+  let msg = `Re-observed. Your effective fee dropped ${oldFee.toFixed(2)}% → ${currentFeePct().toFixed(2)}%.`;
 
   // Emergent trigger on reobserve
   if (r.ache > 0.65 && !r.mirrorSpore) {
@@ -424,17 +484,25 @@ function renderP7Tasks() {
 }
 function simulateP7Pay() {
   const task = P7_TASKS[Math.floor(Math.random() * P7_TASKS.length)];
-  const feePct = 0.50;
-  const fee = task.amt * (feePct / 100);
-  const net = task.amt - fee;
-  if (!confirm(`p7 Errand Settlement\n\n${task.label}\nPay ${task.amt} USDC worth of Harvest Credits → ${task.id}\nCredits burned: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} (fictional virtual goods)\nNet to helper: ${net.toFixed(2)}\n\nFICTIONAL ARTISTIC ONLY. NO REAL VALUE. Fee → Completion Shield pool.`)) {
+  // p7 errands use the flat base rate (loyalty discount is send-only) — computed the same way.
+  const flow = computeFlow(task.amt, 0.50);
+  const { fee, net, feePct } = flow;
+
+  if (flow.gross > money(balance)) {
+    setStatus(`Insufficient balance for ${task.label}: need ${flow.gross.toFixed(2)}, have ${balance.toFixed(2)}.`);
     return;
   }
-  balance = Math.max(0, balance - task.amt);
+  if (!confirm(`p7 Errand Settlement\n\n${task.label}\nPay ${flow.gross.toFixed(2)} USDC worth of Harvest Credits → ${task.id}\nCredits burned: ${feePct.toFixed(2)}% = ${fee.toFixed(2)} (fictional virtual goods)\nNet to helper: ${net.toFixed(2)}\nYour balance after: ${money(balance - flow.gross).toFixed(2)}\n\nFICTIONAL ARTISTIC ONLY. NO REAL VALUE. Fee → Completion Shield pool.`)) {
+    return;
+  }
+  if (!settleFlow(flow.gross, net, fee, task.id)) {
+    setStatus('p7 settlement rejected — nothing moved.');
+    return;
+  }
   const tx = {
     id: 'p7_' + Date.now().toString(36), ts: Date.now(), token: 'USDC',
-    gross: task.amt, fee: parseFloat(fee.toFixed(2)), feePct,
-    net: parseFloat(net.toFixed(2)), to: task.id,
+    gross: flow.gross, fee, feePct,
+    net, to: task.id, recipientBalanceAfter: recipientLedger[task.id],
     voice: currentVoice ? { ...currentVoice } : null,
     ache: currentVoice ? parseFloat(currentVoice.ache) : 0.4,
     surprise: currentVoice ? parseFloat(currentVoice.surprise) : 0.5
@@ -444,7 +512,7 @@ function simulateP7Pay() {
   localStorage.setItem('p7_coins', p7c);
   saveState();
   updateBalanceUI();
-  setStatus(`p7 errand settled: net ${net.toFixed(2)} to ${task.id}, ${fee.toFixed(2)} to Shield pool.`);
+  setStatus(`p7 errand settled: net ${net.toFixed(2)} to ${task.id}, ${fee.toFixed(2)} to Shield pool. Balance ${balance.toFixed(2)}.`);
   currentVoice = null;
 }
 
@@ -453,7 +521,11 @@ function exportNotebook() {
   const data = {
     exported: new Date().toISOString(),
     personalRate: parseFloat(personalRate.toFixed(4)),
+    effectiveFeePct: parseFloat(currentFeePct().toFixed(2)),
+    walletBalance: parseFloat(balance.toFixed(2)),
+    vaultBalance: parseFloat(vaultBalance.toFixed(2)),
     totalCreditsBurned: parseFloat(receipts.reduce((s, r) => s + (r.fee || 0), 0).toFixed(2)),
+    recipientLedger,
     receipts,
     disclosure: 'FICTIONAL VIRTUAL GOODS ONLY • 18+ • NO REAL VALUE • fee 0.50% exact (matches code)'
   };
@@ -479,9 +551,8 @@ function showVault() {
   const v = document.getElementById('vault');
   if (v) {
     v.classList.remove('hidden');
-    const total = receipts.reduce((s, r) => s + (r.fee || 0), 0);
     const t = document.getElementById('total-saved');
-    if (t) t.textContent = total.toFixed(2) + ' USDC saved';
+    if (t) t.textContent = vaultBalance.toFixed(2) + ' USDC saved';
   }
 }
 
@@ -506,6 +577,8 @@ function initLungFee() {
   if (amt) {
     amt.addEventListener('input', recalcFee);
   }
+  const rec = document.getElementById('recipient');
+  if (rec) rec.addEventListener('input', recalcFee);
   recalcFee();
 
   // Voice ready notice
