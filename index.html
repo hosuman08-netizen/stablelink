@@ -107,6 +107,12 @@
         </div>
         <div id="avail-line" class="hint"></div>
 
+        <label for="payout-ccy">Recipient gets paid in</label>
+        <div class="ccy-wrap">
+          <select id="payout-ccy"></select>
+        </div>
+        <small id="ccy-rail" class="hint"></small>
+
         <label for="memo">Reference <span class="opt">optional</span></label>
         <input id="memo" maxlength="64" placeholder="What is this for? (searchable later)">
 
@@ -163,6 +169,11 @@
       <div class="setting" id="fee-schedule">
         <label>Fee schedule &amp; limits</label>
         <div id="fee-table"></div>
+      </div>
+
+      <div class="setting" id="fx-schedule">
+        <label>Exchange rates &amp; FX margin</label>
+        <div id="fx-rate-table"></div>
       </div>
 
       <div class="setting">

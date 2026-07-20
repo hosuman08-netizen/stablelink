@@ -76,6 +76,66 @@ const TOKENS = ['USDC', 'USDT'];
 const NETWORK_FEE = { sol: 0.001, base: 0.004 };
 
 /* ============================================================ *
+ * 3b. FX corridors — recipient local-currency payout
+ * ============================================================ *
+ * The sender's stablecoin is USD-denominated. A recipient can be paid out in a
+ * local currency instead — the reason cross-border rails exist. We show the
+ * mid-market reference rate, apply ONE transparent FX margin, and disclose the
+ * effective locked rate and the exact margin cost. Rates below are FIXED,
+ * deterministic illustrative demo values (NOT live) and are disclosed as such
+ * everywhere they appear — no random walks, no hidden markup. Display == math.  */
+
+const FX_MARGIN_PCT = 0.30;   // transparent conversion margin, shown as its own line
+const FX_LOCK_MS = 10 * 60e3; // how long a quoted rate is held (rate-lock UX)
+
+const CURRENCIES = {
+  USD: { code: 'USD', name: 'US Dollar',        flag: '🇺🇸', mid: 1,       dp: 2, rail: 'Stablecoin — no conversion' },
+  EUR: { code: 'EUR', name: 'Euro',             flag: '🇪🇺', mid: 0.9230,  dp: 2, rail: 'SEPA credit' },
+  GBP: { code: 'GBP', name: 'British Pound',    flag: '🇬🇧', mid: 0.7880,  dp: 2, rail: 'Faster Payments' },
+  PHP: { code: 'PHP', name: 'Philippine Peso',  flag: '🇵🇭', mid: 58.30,   dp: 2, rail: 'InstaPay · GCash' },
+  INR: { code: 'INR', name: 'Indian Rupee',     flag: '🇮🇳', mid: 86.10,   dp: 2, rail: 'UPI · IMPS' },
+  MXN: { code: 'MXN', name: 'Mexican Peso',     flag: '🇲🇽', mid: 18.650,  dp: 2, rail: 'SPEI' },
+  NGN: { code: 'NGN', name: 'Nigerian Naira',   flag: '🇳🇬', mid: 1580.0,  dp: 2, rail: 'NIP transfer' },
+  BRL: { code: 'BRL', name: 'Brazilian Real',   flag: '🇧🇷', mid: 5.4200,  dp: 2, rail: 'PIX' },
+  VND: { code: 'VND', name: 'Vietnamese Dong',  flag: '🇻🇳', mid: 26150,   dp: 0, rail: 'Napas 247' },
+  KRW: { code: 'KRW', name: 'Korean Won',       flag: '🇰🇷', mid: 1385.0,  dp: 0, rail: 'Open Banking' }
+};
+const CCY_CODES = Object.keys(CURRENCIES);
+
+function ccyOf(code) { return CURRENCIES[code] || CURRENCIES.USD; }
+function fxRound(v, dp) { const f = Math.pow(10, dp); return Math.round((Number(v) + Number.EPSILON) * f) / f; }
+
+// Effective (locked) rate = mid-market minus the disclosed margin.
+function effRate(cur) { return cur.mid * (1 - FX_MARGIN_PCT / 100); }
+
+/* Derive the payout from a USD send amount. Pure + deterministic.
+ * usd           — recipient's USD-side amount (after send fee)
+ * returns { cur, isUSD, mid, rate, local, marginPct, marginCostUsd } */
+function fxQuote(usd, code) {
+  const cur = ccyOf(code);
+  const isUSD = cur.code === 'USD';
+  const rate = isUSD ? 1 : effRate(cur);
+  const local = isUSD ? money(usd) : fxRound(usd * rate, cur.dp);
+  const marginCostUsd = isUSD ? 0 : money(usd * (FX_MARGIN_PCT / 100));
+  return { cur, isUSD, mid: cur.mid, rate, local, marginPct: isUSD ? 0 : FX_MARGIN_PCT, marginCostUsd };
+}
+
+function fmtLocal(v, cur) {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur.code,
+      minimumFractionDigits: cur.dp, maximumFractionDigits: cur.dp }).format(v);
+  } catch (e) {
+    return v.toLocaleString('en-US', { minimumFractionDigits: cur.dp, maximumFractionDigits: cur.dp }) + ' ' + cur.code;
+  }
+}
+// Rates print with enough precision to reproduce the payout, without noise.
+function fmtRate(v) {
+  if (v >= 1000) return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  if (v >= 1)    return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return v.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+}
+
+/* ============================================================ *
  * 3. keccak-256 (for real EIP-55 checksums + plausible tx hashes)
  * ============================================================ */
 
@@ -270,14 +330,16 @@ function validateRecipient(raw, chain) {
 const LS = {
   bal: 'p10_balances_v2', receipts: 'p10_receipts', contacts: 'p10_contacts',
   sched: 'p10_schedules', notif: 'p10_notifications', vault: 'p10_vault_balance',
-  opts: 'p10_options', migrated: 'p10_migrated_v2'
+  opts: 'p10_options', migrated: 'p10_migrated_v2', ccy: 'p10_payout_ccy'
 };
 
 let balances, receipts, contacts, schedules, notifications, vaultBalance, options;
+let payoutCcy = 'USD';   // recipient payout currency (personal sends); errands are always USD
 let currentVoice = null;
 let mediaRecorder, audioCtx, analyser, sourceNode, dataArray, raf, recog;
 let pendingFlow = null;   // the reviewed transfer awaiting confirmation
 let liveTimers = [];
+let rateLockTimer = null; // FX rate-lock countdown in the review sheet
 
 function loadJSON(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; }
@@ -293,6 +355,8 @@ function loadState() {
   notifications = loadJSON(LS.notif, []);
   vaultBalance = parseFloat(localStorage.getItem(LS.vault) || '0') || 0;
   options = loadJSON(LS.opts, { forceFail: false, fast: false });
+  const savedCcy = localStorage.getItem(LS.ccy);
+  payoutCcy = CURRENCIES[savedCcy] ? savedCcy : 'USD';
   balances = loadJSON(LS.bal, null);
 
   if (!balances) {
@@ -472,7 +536,7 @@ function showTab(id) {
   if (id === 'history') renderHistory();
   if (id === 'errands') renderErrands();
   if (id === 'scheduled') renderSchedules();
-  if (id === 'settings') renderFeeTable();
+  if (id === 'settings') { renderFeeTable(); renderFxTable(); }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function showSend() { showTab('send'); }
@@ -582,14 +646,37 @@ function currentToken() {
   return TOKENS.indexOf(v) >= 0 ? v : 'USDC';
 }
 
+// The currency actually used to pay a recipient. Errand payouts settle in USD.
+function payoutCcyFor(isErrand) { return isErrand ? 'USD' : payoutCcy; }
+
 function onFormChange() {
   const chain = currentChain(), token = currentToken();
   el('chain-note').textContent =
     `${CHAINS[chain].name}: ~${CHAINS[chain].etaSec}s typical settlement · network fee ${NETWORK_FEE[chain].toFixed(3)} ${token} (simulated) · addresses are ${CHAINS[chain].fmtName}.`;
   el('avail-line').innerHTML = `Available: <strong>${fmtT(avail(chain, token))} ${token}</strong> on ${CHAINS[chain].name}`;
+  renderCcyRail();
   renderRecipientCheck();
   renderRecentChips();
   renderQuote();
+}
+
+function renderCcyRail() {
+  const rail = el('ccy-rail');
+  if (!rail) return;
+  const isErrand = ERRAND_RE.test((el('recipient').value || '').trim());
+  const cur = ccyOf(payoutCcyFor(isErrand));
+  if (isErrand) { rail.innerHTML = 'Errand payouts always settle in <strong>USD</strong>.'; return; }
+  if (cur.code === 'USD') { rail.innerHTML = 'Recipient keeps stablecoin — no conversion, no FX margin.'; return; }
+  rail.innerHTML = `Paid out via <strong>${esc(cur.rail)}</strong> · mid-market ${fmtRate(cur.mid)} ${cur.code}/USD · ${FX_MARGIN_PCT.toFixed(2)}% margin. Illustrative fixed demo rate.`;
+}
+
+function onCcyChange() {
+  const sel = el('payout-ccy');
+  if (sel && CURRENCIES[sel.value]) {
+    payoutCcy = sel.value;
+    localStorage.setItem(LS.ccy, payoutCcy);
+  }
+  onFormChange();
 }
 
 function renderRecipientCheck() {
@@ -620,6 +707,26 @@ function applyFix(action) {
   }
 }
 
+let fxOpen = false;
+function toggleFx() {
+  fxOpen = !fxOpen;
+  const b = el('fx-detail'), c = el('fx-caret');
+  if (b) b.classList.toggle('hidden', !fxOpen);
+  if (c) c.textContent = fxOpen ? '▴' : '▾';
+}
+
+// Transparent FX breakdown, shared by the quote and the review sheet.
+function fxBreakdownHtml(fx, usd) {
+  const c = fx.cur;
+  return `
+    <div class="q-line"><span>Amount to convert</span><span>${fmt(usd)} USD</span></div>
+    <div class="q-line"><span>Mid-market rate</span><span>1 USD = ${fmtRate(fx.mid)} ${c.code}</span></div>
+    <div class="q-line"><span>FX margin · ${fx.marginPct.toFixed(2)}%</span><span>−${fmt(fx.marginCostUsd)} USD</span></div>
+    <div class="q-line"><span>Your locked rate</span><span>1 USD = ${fmtRate(fx.rate)} ${c.code}</span></div>
+    <div class="q-line total"><span>Recipient receives</span><span>${fmtLocal(fx.local, c)}</span></div>
+    <div class="fx-disclose">Fixed illustrative demo rate — not a live market quote. Payout rail: ${esc(c.rail)}.</div>`;
+}
+
 function renderQuote() {
   const amt = parseFloat(el('amount').value) || 0;
   const chain = currentChain(), token = currentToken();
@@ -627,12 +734,26 @@ function renderQuote() {
   const feePct = isErrand ? 0.50 : currentFeePct();
   const f = computeFlow(amt, feePct, chain);
   const t = tierStatus();
+  const fx = fxQuote(f.recipientGets, payoutCcyFor(isErrand));
+
+  const receiveBig = fx.isUSD
+    ? `${fmt(f.recipientGets)} ${token}`
+    : `${fmtLocal(fx.local, fx.cur)}`;
+  const receiveSub = fx.isUSD ? '' :
+    `<span class="q-sub">≈ ${fmt(f.recipientGets)} ${token} · ${fmtRate(fx.rate)} ${fx.cur.code}/USD</span>`;
+
+  const fxBlock = fx.isUSD ? '' : `
+    <button type="button" class="fx-toggle" onclick="toggleFx()" aria-expanded="${fxOpen}">
+      <span>Exchange rate &amp; margin</span>
+      <span class="fx-caret" id="fx-caret">${fxOpen ? '▴' : '▾'}</span>
+    </button>
+    <div id="fx-detail" class="quote-lines fx-lines ${fxOpen ? '' : 'hidden'}">${fxBreakdownHtml(fx, f.recipientGets)}</div>`;
 
   el('quote').innerHTML = `
     <div class="quote-head">
       <div><span class="q-label">You send</span><span class="q-big">${fmt(f.amount)} ${token}</span></div>
       <div class="q-arrow">→</div>
-      <div class="q-right"><span class="q-label">They receive</span><span class="q-big gold">${fmt(f.recipientGets)} ${token}</span></div>
+      <div class="q-right"><span class="q-label">They receive</span><span class="q-big gold">${receiveBig}</span>${receiveSub}</div>
     </div>
     <div class="quote-lines">
       <div class="q-line"><span>Amount</span><span>${fmt(f.amount)} ${token}</span></div>
@@ -640,7 +761,8 @@ function renderQuote() {
       <div class="q-line"><span>Network fee · ${CHAINS[chain].name}</span><span>+${f.networkFee.toFixed(3)} ${token}</span></div>
       <div class="q-line total"><span>Total debited</span><span>${fmtT(f.totalDebit)} ${token}</span></div>
     </div>
-    <div class="quote-foot">Arrives in ~${CHAINS[chain].etaSec}s · quoted ${new Date().toLocaleTimeString()} · stablecoin, no FX conversion applied</div>`;
+    ${fxBlock}
+    <div class="quote-foot">Arrives in ~${CHAINS[chain].etaSec}s · quoted ${new Date().toLocaleTimeString()} · ${fx.isUSD ? 'stablecoin, no FX conversion applied' : `rate locked ${Math.round(FX_LOCK_MS / 60e3)} min on confirm`}</div>`;
 }
 
 function fillMax() {
@@ -749,6 +871,9 @@ function openReview() {
     return;
   }
   clearFormError();
+  const fx = fxQuote(p.flow.recipientGets, payoutCcyFor(p.isErrand));
+  p.fx = fx;
+  p.rateLockUntil = Date.now() + FX_LOCK_MS;
   pendingFlow = p;
 
   const f = p.flow, C = CHAINS[p.chain];
@@ -771,7 +896,8 @@ function openReview() {
 
     <div class="rv-receive">
       <span>They receive</span>
-      <strong>${fmt(f.recipientGets)} ${p.token}</strong>
+      <strong>${fx.isUSD ? `${fmt(f.recipientGets)} ${p.token}` : fmtLocal(fx.local, fx.cur)}</strong>
+      ${fx.isUSD ? '' : `<span class="rv-receive-sub">${fx.cur.flag} via ${esc(fx.cur.rail)} · ≈ ${fmt(f.recipientGets)} ${p.token}</span>`}
     </div>
 
     <div class="quote-lines rv-lines">
@@ -785,6 +911,15 @@ function openReview() {
       ${currentVoice && currentVoice.transcript ? `<div class="q-line sub"><span>Heard</span><span>“${esc(currentVoice.transcript)}”</span></div>` : ''}
     </div>
 
+    ${fx.isUSD ? '' : `
+    <div class="rv-fx">
+      <div class="rv-fx-head">
+        <span>Exchange rate</span>
+        <span class="rv-fx-lock" id="rv-fx-lock">🔒 locked 10:00</span>
+      </div>
+      <div class="quote-lines fx-lines">${fxBreakdownHtml(fx, f.recipientGets)}</div>
+    </div>`}
+
     ${warns.map(w => `<div class="rv-warn">${esc(w)}</div>`).join('')}
 
     ${!known && !p.isErrand ? `<label class="switch"><input type="checkbox" id="rv-save"> Save this recipient for next time</label>
@@ -796,7 +931,21 @@ function openReview() {
     <button id="confirm-btn" class="primary" disabled onclick="confirmTransfer()">Checking…</button>
     <button class="ghost-btn wide" onclick="closeSheet()">Back to edit</button>
     <div class="rv-legal">FICTIONAL DEMO · SIMULATED VIRTUAL CREDITS · NO REAL MONEY OR VALUE · nothing is broadcast to any network.</div>
-  `, () => { pendingFlow = null; });
+  `, () => { pendingFlow = null; if (rateLockTimer) { clearInterval(rateLockTimer); rateLockTimer = null; } });
+
+  // Rate-lock countdown. Rates are fixed, so on expiry we simply re-hold the same
+  // quote and reset the clock — the number the user saw is the number they get.
+  if (rateLockTimer) clearInterval(rateLockTimer);
+  if (!fx.isUSD) {
+    rateLockTimer = setInterval(() => {
+      const lock = el('rv-fx-lock');
+      if (!lock || !pendingFlow) { clearInterval(rateLockTimer); rateLockTimer = null; return; }
+      let ms = pendingFlow.rateLockUntil - Date.now();
+      if (ms <= 0) { pendingFlow.rateLockUntil = Date.now() + FX_LOCK_MS; ms = FX_LOCK_MS; lock.textContent = '🔄 rate refreshed · unchanged'; return; }
+      const s = Math.floor(ms / 1000);
+      lock.textContent = `🔒 locked ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    }, 1000);
+  }
 
   const save = el('rv-save');
   if (save) save.addEventListener('change', () => el('rv-alias').classList.toggle('hidden', !save.checked));
@@ -857,12 +1006,15 @@ function confirmTransfer() {
   debit(p.chain, p.token, f.totalDebit);
   vaultBalance = money(vaultBalance + f.sendFee);
 
+  const fx = p.fx || fxQuote(f.recipientGets, payoutCcyFor(p.isErrand));
   const id = 'tx_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const tx = {
     id, ts: Date.now(), type: p.isErrand ? 'errand' : 'send',
     chain: p.chain, token: p.token, to: p.to,
     amount: f.amount, sendFee: f.sendFee, networkFee: f.networkFee,
     recipientGets: f.recipientGets, totalDebit: f.totalDebit, feePct: f.feePct,
+    // FX payout — omitted (null) when the recipient keeps stablecoin.
+    fx: fx.isUSD ? null : { ccy: fx.cur.code, mid: fx.mid, rate: fx.rate, marginPct: fx.marginPct, marginCostUsd: fx.marginCostUsd, local: fx.local },
     memo: p.memo || '', status: 'submitted',
     hash: makeHash(id, p.chain),
     voice: currentVoice ? { transcript: currentVoice.transcript || '', ts: currentVoice.ts } : null,
@@ -909,7 +1061,7 @@ function runLifecycle(tx) {
     const t2 = setTimeout(() => {
       advance(tx, 'delivered');
       renderBalances();
-      notify('Transfer delivered', `${labelFor(tx.to)} received ${fmt(tx.recipientGets)} ${tx.token} on ${C.name}.`, tx.id);
+      notify('Transfer delivered', `${labelFor(tx.to)} received ${txReceived(tx)}${tx.fx ? '' : ` on ${C.name}`}.`, tx.id);
       // A settled transfer is the moment that counts as real product usage.
       if (window.legionTrack) window.legionTrack('activate');
       const before = _lastTierIdx;
@@ -944,7 +1096,7 @@ function renderLiveTx(tx) {
     <div class="lt-main">${fmt(tx.amount)} ${tx.token} → ${esc(labelFor(tx.to))}</div>
     <div class="lt-bar"><div class="lt-fill ${m.cls}" style="width:${m.pct}%"></div></div>
     <div class="lt-sub">${esc(m.blurb)} ${tx.status === 'delivered'
-      ? `${esc(labelFor(tx.to))} received <strong>${fmt(tx.recipientGets)} ${tx.token}</strong>.`
+      ? `${esc(labelFor(tx.to))} received <strong>${txReceived(tx)}</strong>.`
       : tx.status === 'failed' ? `<strong>${fmtT(tx.totalDebit)} ${tx.token}</strong> returned to your balance.`
       : `Estimated arrival ~${CHAINS[tx.chain].etaSec}s.`}</div>
     ${tx.status === 'failed' ? `<button class="ghost-btn" onclick="repeatTx('${tx.id}')">Try again</button>` : ''}
@@ -1158,6 +1310,20 @@ function renderHistory(rerenderFilters = true) {
 
 function txById(id) { return receipts.find(r => r.id === id); }
 
+// What the recipient actually got — local currency if converted, else stablecoin.
+function txReceived(r) {
+  if (r.fx && CURRENCIES[r.fx.ccy]) return fmtLocal(r.fx.local, CURRENCIES[r.fx.ccy]);
+  return `${fmt(r.recipientGets)} ${r.token}`;
+}
+// FX detail rows for a settled transfer (empty when no conversion happened).
+function txFxLines(r) {
+  if (!r.fx || !CURRENCIES[r.fx.ccy]) return '';
+  const c = CURRENCIES[r.fx.ccy];
+  return `<div class="q-line"><span>Mid-market rate</span><span>1 USD = ${fmtRate(r.fx.mid)} ${c.code}</span></div>
+    <div class="q-line"><span>FX margin · ${(r.fx.marginPct || 0).toFixed(2)}%</span><span>−${fmt(r.fx.marginCostUsd)} USD</span></div>
+    <div class="q-line"><span>Locked rate</span><span>1 USD = ${fmtRate(r.fx.rate)} ${c.code}</span></div>`;
+}
+
 function openTxDetail(id) {
   const r = txById(id);
   if (!r) return;
@@ -1189,10 +1355,12 @@ function openTxDetail(id) {
     ${failReason}
     <div class="tl">${timeline}</div>
     <div class="quote-lines rv-lines">
-      <div class="q-line"><span>Recipient receives</span><span>${fmt(r.recipientGets)} ${r.token}</span></div>
       <div class="q-line"><span>Send fee · ${(r.feePct || 0).toFixed(2)}%</span><span>${fmt(r.sendFee)} ${r.token}</span></div>
       <div class="q-line"><span>Network fee</span><span>${(r.networkFee || 0).toFixed(3)} ${r.token}</span></div>
-      <div class="q-line total"><span>Total debited</span><span>${fmtT(r.totalDebit)} ${r.token}</span></div>
+      <div class="q-line"><span>${r.fx ? 'Converted from' : 'Recipient receives'}</span><span>${fmt(r.recipientGets)} ${r.token}</span></div>
+      ${txFxLines(r)}
+      <div class="q-line total"><span>Recipient receives</span><span>${txReceived(r)}</span></div>
+      <div class="q-line sub"><span>Total debited</span><span>${fmtT(r.totalDebit)} ${r.token}</span></div>
     </div>
     <div class="kv">
       <div><span>Date</span><span>${new Date(r.ts).toLocaleString()}</span></div>
@@ -1229,7 +1397,12 @@ function openReceipt(id) {
         <div><span>Amount</span><span>${fmt(r.amount)} ${r.token}</span></div>
         <div><span>Send fee (${(r.feePct || 0).toFixed(2)}%)</span><span>${fmt(r.sendFee)} ${r.token}</span></div>
         <div><span>Network fee</span><span>${(r.networkFee || 0).toFixed(3)} ${r.token}</span></div>
-        <div class="rc-total"><span>Recipient received</span><span>${fmt(r.recipientGets)} ${r.token}</span></div>
+        ${r.fx && CURRENCIES[r.fx.ccy] ? `
+        <div><span>Converted from</span><span>${fmt(r.recipientGets)} ${r.token}</span></div>
+        <div><span>Mid-market rate</span><span>1 USD = ${fmtRate(r.fx.mid)} ${r.fx.ccy}</span></div>
+        <div><span>FX margin (${(r.fx.marginPct || 0).toFixed(2)}%)</span><span>−${fmt(r.fx.marginCostUsd)} USD</span></div>
+        <div><span>Locked rate</span><span>1 USD = ${fmtRate(r.fx.rate)} ${r.fx.ccy}</span></div>` : ''}
+        <div class="rc-total"><span>Recipient received</span><span>${txReceived(r)}</span></div>
         <div><span>Total debited</span><span>${fmtT(r.totalDebit)} ${r.token}</span></div>
         ${r.memo ? `<div><span>Reference</span><span>${esc(r.memo)}</span></div>` : ''}
         <div><span>Transaction ID</span><span class="mono wrap">${esc(r.hash)}</span></div>
@@ -1252,7 +1425,11 @@ function receiptText(r) {
     `Amount: ${fmt(r.amount)} ${r.token}`,
     `Send fee (${(r.feePct || 0).toFixed(2)}%): ${fmt(r.sendFee)} ${r.token}`,
     `Network fee: ${(r.networkFee || 0).toFixed(3)} ${r.token}`,
-    `Recipient received: ${fmt(r.recipientGets)} ${r.token}`,
+    r.fx && CURRENCIES[r.fx.ccy] ? `Converted from: ${fmt(r.recipientGets)} ${r.token}` : '',
+    r.fx && CURRENCIES[r.fx.ccy] ? `Mid-market rate: 1 USD = ${fmtRate(r.fx.mid)} ${r.fx.ccy}` : '',
+    r.fx && CURRENCIES[r.fx.ccy] ? `FX margin (${(r.fx.marginPct || 0).toFixed(2)}%): -${fmt(r.fx.marginCostUsd)} USD` : '',
+    r.fx && CURRENCIES[r.fx.ccy] ? `Locked rate: 1 USD = ${fmtRate(r.fx.rate)} ${r.fx.ccy}` : '',
+    `Recipient received: ${txReceived(r)}`,
     `Total debited: ${fmtT(r.totalDebit)} ${r.token}`,
     r.memo ? `Reference: ${r.memo}` : '',
     `ID: ${r.hash}`,
@@ -1286,6 +1463,8 @@ function repeatTx(id) {
   el('recipient').value = r.to;
   el('amount').value = r.amount.toFixed(2);
   el('memo').value = r.memo || '';
+  if (r.fx && CURRENCIES[r.fx.ccy]) { payoutCcy = r.fx.ccy; localStorage.setItem(LS.ccy, payoutCcy); }
+  const ccySel = el('payout-ccy'); if (ccySel) ccySel.value = payoutCcy;
   onFormChange();
   toast('Details copied into the form — review before sending.');
 }
@@ -1294,13 +1473,15 @@ function exportHistory(kind) {
   const rows = filteredReceipts();
   let blob, name;
   if (kind === 'csv') {
-    const head = ['date', 'status', 'type', 'network', 'token', 'recipient_label', 'recipient', 'amount', 'send_fee_pct', 'send_fee', 'network_fee', 'recipient_received', 'total_debited', 'reference', 'transaction_id'];
+    const head = ['date', 'status', 'type', 'network', 'token', 'recipient_label', 'recipient', 'amount', 'send_fee_pct', 'send_fee', 'network_fee', 'recipient_received_usd', 'payout_currency', 'fx_mid_rate', 'fx_margin_pct', 'fx_locked_rate', 'recipient_received', 'total_debited', 'reference', 'transaction_id'];
     const esq = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
     const body = rows.map(r => [
       new Date(r.ts).toISOString(), r.status, r.type, (CHAINS[r.chain] || {}).name || r.chain, r.token,
       labelFor(r.to), r.to, money(r.amount).toFixed(2), (r.feePct || 0).toFixed(2), money(r.sendFee).toFixed(2),
-      (r.networkFee || 0).toFixed(3), money(r.recipientGets).toFixed(2), q3(r.totalDebit).toFixed(3),
-      r.memo || '', r.hash
+      (r.networkFee || 0).toFixed(3), money(r.recipientGets).toFixed(2),
+      r.fx ? r.fx.ccy : r.token, r.fx ? r.fx.mid : '', r.fx ? (r.fx.marginPct || 0).toFixed(2) : '', r.fx ? r.fx.rate : '',
+      r.fx && CURRENCIES[r.fx.ccy] ? r.fx.local.toFixed(CURRENCIES[r.fx.ccy].dp) + ' ' + r.fx.ccy : money(r.recipientGets).toFixed(2) + ' ' + r.token,
+      q3(r.totalDebit).toFixed(3), r.memo || '', r.hash
     ].map(esq).join(','));
     blob = new Blob([[head.join(','), ...body].join('\n')], { type: 'text/csv' });
     name = 'stablelink-activity-' + Date.now() + '.csv';
@@ -1310,6 +1491,8 @@ function exportHistory(kind) {
       filters,
       tier: tierStatus().cur.name,
       effectiveFeePct: currentFeePct(),
+      fxMarginPct: FX_MARGIN_PCT,
+      fxRatesNote: 'Fixed illustrative demo rates, not live market quotes.',
       lifetimeVolume: lifetimeVolume(),
       balances, vaultBalance,
       matchedTransfers: rows.length,
@@ -1352,6 +1535,8 @@ function openScheduleEditor(idx, seed) {
     </div>
     <label class="sh-label">Amount</label>
     <input id="sc-amt" type="number" step="0.01" value="${src.amount != null ? money(src.amount).toFixed(2) : '25.00'}">
+    <label class="sh-label">Recipient gets paid in</label>
+    <select id="sc-ccy">${CCY_CODES.map(code => `<option value="${code}" ${(src.ccy || (src.fx && src.fx.ccy) || 'USD') === code ? 'selected' : ''}>${CURRENCIES[code].flag} ${code} — ${CURRENCIES[code].name}</option>`).join('')}</select>
     <label class="sh-label">Frequency</label>
     <select id="sc-freq">${Object.entries(FREQS).map(([k, v]) => `<option value="${k}" ${src.freq === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
     <label class="sh-label">Reference <span class="opt">optional</span></label>
@@ -1366,6 +1551,7 @@ function saveSchedule(idx) {
   const to = (el('sc-to').value || '').trim();
   const chain = el('sc-chain').value, token = el('sc-token').value;
   const amount = money(parseFloat(el('sc-amt').value) || 0);
+  const ccySel = el('sc-ccy'); const ccy = ccySel && CURRENCIES[ccySel.value] ? ccySel.value : 'USD';
   const freq = el('sc-freq').value;
   const memo = (el('sc-memo').value || '').trim();
   const errBox = el('sc-err');
@@ -1376,7 +1562,7 @@ function saveSchedule(idx) {
 
   const rec = {
     id: idx != null ? schedules[idx].id : 'sc_' + Date.now().toString(36),
-    to: res.normalized, chain, token, amount, freq, memo,
+    to: res.normalized, chain, token, amount, ccy, freq, memo,
     active: idx != null ? schedules[idx].active : true,
     nextRun: idx != null && schedules[idx].freq === freq ? schedules[idx].nextRun : Date.now() + FREQS[freq].ms,
     runs: idx != null ? schedules[idx].runs : 0,
@@ -1416,7 +1602,7 @@ function renderSchedules() {
       <div class="sc-head">
         <div>
           <div class="sc-title">${fmt(s.amount)} ${s.token} → ${esc(labelFor(s.to))}</div>
-          <div class="sc-sub">${FREQS[s.freq].label} · ${CHAINS[s.chain].name}${s.memo ? ' · ' + esc(s.memo) : ''}</div>
+          <div class="sc-sub">${FREQS[s.freq].label} · ${CHAINS[s.chain].name}${s.ccy && s.ccy !== 'USD' && CURRENCIES[s.ccy] ? ' · pays out in ' + CURRENCIES[s.ccy].flag + ' ' + s.ccy : ''}${s.memo ? ' · ' + esc(s.memo) : ''}</div>
         </div>
         <span class="pill sm ${s.active ? 'pending' : ''}">${s.active ? 'Active' : 'Paused'}</span>
       </div>
@@ -1471,11 +1657,14 @@ function runScheduled(s) {
   const f = computeFlow(s.amount, isErrand ? 0.50 : currentFeePct(), s.chain);
   if (!flowIsSound(f) || !debit(s.chain, s.token, f.totalDebit)) return;
   vaultBalance = money(vaultBalance + f.sendFee);
+  const fx = fxQuote(f.recipientGets, isErrand ? 'USD' : (s.ccy || 'USD'));
   const id = 'tx_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const tx = {
     id, ts: Date.now(), type: isErrand ? 'errand' : 'send', chain: s.chain, token: s.token, to: s.to,
     amount: f.amount, sendFee: f.sendFee, networkFee: f.networkFee, recipientGets: f.recipientGets,
-    totalDebit: f.totalDebit, feePct: f.feePct, memo: s.memo || '', status: 'submitted',
+    totalDebit: f.totalDebit, feePct: f.feePct,
+    fx: fx.isUSD ? null : { ccy: fx.cur.code, mid: fx.mid, rate: fx.rate, marginPct: fx.marginPct, marginCostUsd: fx.marginCostUsd, local: fx.local },
+    memo: s.memo || '', status: 'submitted',
     hash: makeHash(id, s.chain), scheduleId: s.id, voice: null,
     timeline: [{ status: 'submitted', ts: Date.now() }]
   };
@@ -1483,7 +1672,7 @@ function runScheduled(s) {
   s.runs++;
   saveState();
   renderBalances();
-  notify('Scheduled transfer sent', `${fmt(f.amount)} ${s.token} to ${labelFor(s.to)} — ${fmt(f.recipientGets)} will arrive.`, tx.id);
+  notify('Scheduled transfer sent', `${fmt(f.amount)} ${s.token} to ${labelFor(s.to)} — ${txReceived(tx)} will arrive.`, tx.id);
   runLifecycle(tx);
 }
 
@@ -1754,9 +1943,30 @@ function renderFeeTable() {
     </div>`;
 }
 
+function renderFxTable() {
+  const host = el('fx-rate-table');
+  if (!host) return;
+  const rows = CCY_CODES.filter(c => c !== 'USD').map(code => {
+    const c = CURRENCIES[code];
+    return `<tr class="${code === payoutCcy ? 'on' : ''}">
+      <td>${c.flag} ${code}</td>
+      <td>${fmtRate(c.mid)}</td>
+      <td>${fmtRate(effRate(c))}</td>
+      <td>${esc(c.rail)}</td></tr>`;
+  }).join('');
+  host.innerHTML = `
+    <table class="fee-tbl fx-tbl">
+      <thead><tr><th>Currency</th><th>Mid-market</th><th>Your rate</th><th>Payout rail</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="fee-now">
+      One transparent <strong>${FX_MARGIN_PCT.toFixed(2)}%</strong> FX margin applies to conversions — shown as its own line on every quote and receipt. USD payouts keep stablecoin with no conversion and no margin. Rates are <strong>fixed illustrative demo values</strong>, not live market quotes.
+    </div>`;
+}
+
 function resetDemo() {
   if (!confirm('Clear all simulated balances, transfers, recipients and schedules on this device?')) return;
-  [LS.bal, LS.receipts, LS.contacts, LS.sched, LS.notif, LS.vault, LS.opts, 'p10_balance', 'p10_personal_rate', 'p10_recipient_ledger'].forEach(k => localStorage.removeItem(k));
+  [LS.bal, LS.receipts, LS.contacts, LS.sched, LS.notif, LS.vault, LS.opts, LS.ccy, 'p10_balance', 'p10_personal_rate', 'p10_recipient_ledger'].forEach(k => localStorage.removeItem(k));
   location.reload();
 }
 
@@ -1770,6 +1980,17 @@ function initApp() {
   renderBalances();
   renderBell();
   onFormChange();
+
+  // Populate the payout-currency selector from the single CURRENCIES source.
+  const ccySel = el('payout-ccy');
+  if (ccySel) {
+    ccySel.innerHTML = CCY_CODES.map(code => {
+      const c = CURRENCIES[code];
+      return `<option value="${code}">${c.flag} ${code} — ${c.name}${code === 'USD' ? ' (keep stablecoin)' : ''}</option>`;
+    }).join('');
+    ccySel.value = payoutCcy;
+    ccySel.addEventListener('change', () => { onCcyChange(); clearFormError(); });
+  }
 
   ['chain', 'token'].forEach(id => el(id).addEventListener('change', () => { onFormChange(); clearFormError(); }));
   ['amount', 'recipient', 'memo'].forEach(id => el(id).addEventListener('input', () => { onFormChange(); clearFormError(); }));
