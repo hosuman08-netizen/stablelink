@@ -368,6 +368,9 @@ function executeTransfer() {
   receipts.unshift(tx);
   saveState();
 
+  // Core action: a transfer actually settled — the representative "used the app" moment.
+  if (window.legionTrack) window.legionTrack('activate');
+
   // Loyalty grows with each transfer, gradually lowering your fee.
   if (tx.voice) {
     personalRate = Math.min(1.9, personalRate + (tx.surprise - 0.48) * 0.09);
@@ -684,6 +687,7 @@ function exportNotebook() {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (window.legionTrack) window.legionTrack('share');
   setStatus('History exported (' + receipts.length + ' transfers).');
 }
 
