@@ -398,6 +398,44 @@ function loadState() {
   });
 }
 
+
+function slDayKey(off){const d=new Date();d.setDate(d.getDate()+(off||0));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function bumpSlStreak(kind){
+  try{
+    let st=JSON.parse(localStorage.getItem('sl_streak')||'{}');
+    const t0=slDayKey(0);
+    if(st.last!==t0){
+      const y=slDayKey(-1),y2=slDayKey(-2);
+      if(st.last&&st.last!==y&&st.last===y2&&(st.count||0)>=3){
+        const ready=!st.shieldLast||((new Date(t0)-new Date(st.shieldLast))/86400000)>=7;
+        if(ready){st.shieldLast=t0;st.last=y;}
+      }
+      st.count=(st.last===y)?(st.count||0)+1:1; st.last=t0;
+      localStorage.setItem('sl_streak',JSON.stringify(st));
+      try{legionTrack('streak',{count:st.count})}catch(e){}
+    }
+    const k='sl_day_'+t0; let day=JSON.parse(localStorage.getItem(k)||'{"tx":0}');
+    day.tx=(day.tx||0)+1; localStorage.setItem(k,JSON.stringify(day));
+    renderSlLoop();
+  }catch(e){}
+}
+function renderSlLoop(){
+  try{
+    let el=document.getElementById('slLoop');
+    if(!el){ el=document.createElement('div'); el.id='slLoop';
+      el.style.cssText='margin:8px 12px;padding:10px;border:1px solid #2a2438;border-radius:12px;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;background:#0e1218';
+      const host=document.querySelector('header')||document.querySelector('h1')||document.body;
+      host.insertAdjacentElement('afterend', el);
+    }
+    const st=JSON.parse(localStorage.getItem('sl_streak')||'{}');
+    const day=JSON.parse(localStorage.getItem('sl_day_'+slDayKey(0))||'{}');
+    const end=new Date(); end.setHours(24,0,0,0);
+    const ms=Math.max(0,end-Date.now());
+    const clock=Math.floor(ms/3600000)+'h '+Math.floor((ms%3600000)/60000)+'m';
+    el.innerHTML='🔥 '+(st.count||0)+'d · today tx '+(day.tx||0)+' · reset '+clock+' · <span style="opacity:.7">stable fee sim · not real money</span>';
+  }catch(e){}
+}
+
 function saveState() {
   localStorage.setItem(LS.bal, JSON.stringify(balances));
   localStorage.setItem(LS.receipts, JSON.stringify(receipts));
@@ -524,6 +562,7 @@ const TABS = [
 let activeTab = 'send';
 
 function renderNav() {
+  try{renderSlLoop();}catch(e){}
   const nav = el('nav');
   if (!nav) return;
   nav.innerHTML = TABS.map(t => {
@@ -1026,6 +1065,7 @@ function confirmTransfer() {
     voice: currentVoice ? { transcript: currentVoice.transcript || '', ts: currentVoice.ts } : null,
     timeline: [{ status: 'submitted', ts: Date.now() }]
   };
+  try{bumpSlStreak('tx');}catch(e){}
   receipts.unshift(tx);
   saveState();
   closeSheet();
@@ -2033,3 +2073,5 @@ window.stableLink = {
 };
 
 /* LEGION_WAVE_46_wave_stamp */ /* ship wave 46 2026-07-21T07:43:00 */
+
+try{ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', renderSlLoop); else setTimeout(renderSlLoop,80); }catch(e){}
