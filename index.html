@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,114 +27,166 @@
   <div class="container">
     <header>
       <div class="disclaimer">FICTIONAL DEMO • 18+ • SIMULATED VIRTUAL CREDITS ONLY • NO REAL MONEY OR VALUE • NOT A BANK, WALLET, OR REMITTANCE SERVICE • NOT INVESTMENT ADVICE • FEE SHOWN EXACTLY MATCHES WHAT IS CHARGED</div>
-      <h1>StableLink</h1>
-      <p class="tagline">Send stablecoins, confirm with your voice — with a fee shown to the exact cent.</p>
+
+      <div class="brand-row">
+        <div>
+          <h1>StableLink</h1>
+          <p class="tagline">Stablecoin transfers with the fee shown to the exact cent.</p>
+        </div>
+        <button id="bell" class="bell" onclick="openNotifications()" aria-label="Activity notifications">
+          <span aria-hidden="true">🔔</span>
+          <span id="bell-badge" class="bell-badge hidden">0</span>
+        </button>
+      </div>
 
       <div class="wallet">
-        <button onclick="connectWallet()">🔗 Connect Wallet</button>
-        <div id="wallet-info">Not connected • Solana / Base</div>
-        <button class="chain-btn" onclick="switchChain()">Switch chain</button>
+        <button id="connect-btn" onclick="connectWallet()">Connect wallet</button>
+        <div id="wallet-info">Not connected · Solana / Base</div>
       </div>
 
-      <div class="nav">
-        <button onclick="showSend()">Send</button>
-        <button onclick="showNotebook()">History</button>
-        <button onclick="showP7Cross()">Errands</button>
-        <button onclick="showSettings()">Settings</button>
-      </div>
-
-      <!-- Balance card — wallet, effective fee, loyalty tier progress -->
+      <!-- Balance card — total, per chain/token breakdown, loyalty tier -->
       <div class="balance-card">
-        <div class="bal-main">
-          <span class="bal-label">Wallet</span>
-          <span><strong id="balance">0.00</strong> USDC</span>
-        </div>
+        <button class="bal-main" onclick="toggleBalanceBreakdown()" aria-expanded="false" aria-controls="bal-breakdown">
+          <span class="bal-label">Total balance <span class="bal-caret" id="bal-caret">▾</span></span>
+          <span class="bal-amount"><strong id="balance">0.00</strong> <span class="bal-unit">USD-equiv</span></span>
+        </button>
+        <div id="bal-breakdown" class="bal-breakdown hidden"></div>
         <div class="bal-sub">
-          <span>Total fee saved <strong id="total-saved">0.00</strong></span>
-          <span>Your fee <strong id="personal-rate">0.50%</strong></span>
+          <span>Fee saved to date <strong id="total-saved">0.00</strong></span>
+          <span>Your send fee <strong id="personal-rate">0.50%</strong></span>
         </div>
 
-        <!-- Loyalty tier — visible progress toward your next lower fee -->
+        <!-- Loyalty tier — progress is lifetime settled volume, not a made-up score -->
         <div class="tier-block">
           <div class="tier-row">
             <span id="tier-name">Tier 1 · Standard</span>
-            <span id="tier-next" class="tier-next"></span>
+            <button class="tier-next" onclick="showSettings();scrollToFees()" id="tier-next"></button>
           </div>
           <div class="tier-bar"><div id="tier-fill" class="tier-fill"></div></div>
           <div id="tier-hint" class="tier-hint"></div>
         </div>
       </div>
 
-      <div id="status" class="status">Ready — speak to confirm your transfer.</div>
-
-      <!-- Voice confirm hero -->
-      <button id="voice-btn" onclick="startVoiceTransfer()" class="voice-cta">🎙 Voice Your Transfer</button>
-      <div id="voice-status" class="status"></div>
-      <div id="voice-note" style="font-size:0.8rem;opacity:0.8;margin-bottom:8px">No voice note yet — record one above.</div>
-      <div id="wave-wrap" style="display:none;background:#0a0806;border-radius:6px;padding:6px;margin-bottom:8px"><canvas id="voice-wave" width="620" height="78"></canvas></div>
+      <nav class="nav" id="nav"></nav>
+      <div id="status" class="status">Ready.</div>
     </header>
 
-    <!-- Send -->
-    <div id="send" class="section">
-      <h2>Send Stablecoins</h2>
+    <!-- ============ SEND ============ -->
+    <section id="send" class="section">
       <div class="form">
-        <label>Chain</label>
-        <select id="chain">
-          <option value="sol">Solana (fastest, lowest fee)</option>
-          <option value="base">Base (EVM)</option>
-        </select>
+        <div class="field-row">
+          <div class="field">
+            <label for="chain">Network</label>
+            <select id="chain">
+              <option value="sol">Solana</option>
+              <option value="base">Base</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="token">Token</label>
+            <select id="token">
+              <option value="USDC">USDC</option>
+              <option value="USDT">USDT</option>
+            </select>
+          </div>
+        </div>
+        <small id="chain-note" class="hint"></small>
 
-        <label>Token</label>
-        <select id="token">
-          <option>USDC</option>
-          <option>USDT</option>
-        </select>
+        <label for="recipient">Recipient</label>
+        <div class="recip-wrap">
+          <input id="recipient" placeholder="Paste address, or pick a saved recipient" autocomplete="off" spellcheck="false">
+          <button class="icon-btn" onclick="openContacts()" title="Saved recipients" aria-label="Saved recipients">👤</button>
+        </div>
+        <div id="recent-chips" class="chips"></div>
+        <div id="recipient-check" class="check-line"></div>
 
-        <label>Recipient (address or errand ID)</label>
-        <input id="recipient" placeholder="0x… or errand-helper-42" value="errand-helper-7">
+        <label for="amount">Amount</label>
+        <div class="amount-wrap">
+          <input id="amount" type="number" inputmode="decimal" value="25" min="0" step="0.01">
+          <button class="max-btn" onclick="fillMax()">Max</button>
+        </div>
+        <div id="avail-line" class="hint"></div>
 
-        <label>Amount</label>
-        <input id="amount" type="number" value="25" min="1" step="0.01">
-        <small id="fee-note">Fee recalculates below — exact and matching the code. Simulated virtual credits.</small>
-        <small id="recipient-received" style="color:var(--gold)"></small>
+        <label for="memo">Reference <span class="opt">optional</span></label>
+        <input id="memo" maxlength="64" placeholder="What is this for? (searchable later)">
 
-        <label>Voice confirm (optional)</label>
-        <button onclick="voiceConfirmTx()" class="voice-btn">🎙️ Speak to confirm</button>
-        <div id="voice-result"></div>
+        <div id="quote" class="quote"></div>
+        <div id="form-error" class="err-box hidden"></div>
 
-        <button onclick="executeTransfer()" class="primary">Send transfer</button>
-        <div id="transfer-status" class="status"></div>
-        <small style="color:var(--muted)">Exact fee shown above. Simulated virtual credits only. Reversible until you confirm.</small>
+        <button onclick="openReview()" class="primary" id="review-btn">Review transfer</button>
+        <button id="voice-btn" onclick="startVoiceTransfer()" class="voice-cta">🎙 Fill by voice</button>
+        <div id="voice-status" class="voice-status"></div>
+        <div id="wave-wrap" class="wave-wrap hidden"><canvas id="voice-wave" width="620" height="72"></canvas></div>
+        <small class="foot-note">Every figure above is produced by the same calculator that settles the transfer. Simulated virtual credits only.</small>
       </div>
-    </div>
 
-    <!-- History is rendered dynamically by showNotebook() into #notebook -->
+      <div id="live-tx" class="live-tx hidden"></div>
+    </section>
 
-    <!-- Errands -->
-    <div id="p7cross" class="section hidden">
-      <h2>Errands — Pay in Stablecoins</h2>
-      <div id="p7-tasks"></div>
-      <button onclick="simulateP7Pay()" class="primary">Complete errand → Pay net (0.50% fee)</button>
-      <small>Fee funds the errand protection pool. Voice confirm recommended.</small>
-    </div>
+    <!-- ============ ACTIVITY / HISTORY ============ -->
+    <section id="history" class="section hidden">
+      <div class="sec-head">
+        <h2>Activity</h2>
+        <button class="ghost-btn" onclick="toggleFilters()" id="filter-toggle">Filters</button>
+      </div>
+      <div id="filters" class="filters hidden"></div>
+      <div id="hist-summary" class="hist-summary"></div>
+      <div id="hist-list" class="hist-list"></div>
+      <div class="export-row">
+        <button class="ghost-btn" onclick="exportHistory('csv')">Export CSV</button>
+        <button class="ghost-btn" onclick="exportHistory('json')">Export JSON</button>
+        <small>Exports exactly the rows matching your current filters.</small>
+      </div>
+    </section>
 
-    <!-- Settings -->
-    <div id="settings" class="section hidden">
-      <h2>Settings</h2>
+    <!-- ============ ERRANDS ============ -->
+    <section id="errands" class="section hidden">
+      <div class="sec-head"><h2>Errands</h2></div>
+      <p class="sec-lead">Errand payouts use a flat <strong>0.50%</strong> platform fee — the loyalty discount applies to personal sends only. Both rates come from the same calculator.</p>
+      <div id="errand-tasks" class="task-grid"></div>
+    </section>
+
+    <!-- ============ SCHEDULED ============ -->
+    <section id="scheduled" class="section hidden">
+      <div class="sec-head">
+        <h2>Scheduled</h2>
+        <button class="ghost-btn" onclick="openScheduleEditor()">New schedule</button>
+      </div>
+      <p class="sec-lead">Recurring transfers run while this page is open. You are notified 24h before a run if your balance is short.</p>
+      <div id="schedule-list" class="sched-list"></div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section id="settings" class="section hidden">
+      <div class="sec-head"><h2>Settings</h2></div>
+
+      <div class="setting" id="fee-schedule">
+        <label>Fee schedule &amp; limits</label>
+        <div id="fee-table"></div>
+      </div>
+
       <div class="setting">
-        <label>Fee (always shown)</label>
-        <div>Base fee is 0.50% (50 basis points). Send transfers earn a loyalty discount down to a 0.04% minimum; errands use a flat 0.50%. Every number comes from one shared calculator — what you see always equals what is charged.</div>
+        <label>How your fee is calculated</label>
+        <div class="setting-body">
+          Base fee is <strong>0.50%</strong> (50 bps). Personal sends earn a loyalty rate based on your <strong>lifetime settled volume</strong> — a number you can verify in Activity. Errands are always 0.50%. Network fees are charged separately per chain and are never rebated.
+          <div class="formula">send fee = tier rate × amount · recipient receives = amount − send fee · you pay = amount + network fee</div>
+        </div>
       </div>
+
       <div class="setting">
-        <label>Fee transparency</label>
-        <div>Pre-transfer estimate • Confirm dialog • Receipt • History • Export — all show the identical fee actually charged (code equals display).</div>
+        <label>Demo controls</label>
+        <div class="setting-body">
+          <label class="switch"><input type="checkbox" id="opt-fail"> Force the next transfer to fail (to exercise the recovery path)</label>
+          <label class="switch"><input type="checkbox" id="opt-fast"> Fast settlement (skip simulated confirmation delays)</label>
+          <button class="ghost-btn danger" onclick="resetDemo()">Reset demo data</button>
+        </div>
       </div>
+
       <div class="setting">
-        <label>Disclaimer</label>
-        <div>FICTIONAL DEMO ONLY • SIMULATED VIRTUAL CREDITS • NO REAL MONEY, YIELD, OR VALUE • NOT INVESTMENT ADVICE • 18+ • REVERSIBLE BEFORE YOU CONFIRM</div>
+        <label>Disclosure</label>
+        <div class="setting-body">FICTIONAL DEMO ONLY • SIMULATED VIRTUAL CREDITS • NO REAL MONEY, YIELD, OR VALUE • NOT INVESTMENT ADVICE • 18+ • Transaction hashes are locally generated and exist on no real chain. Nothing here is broadcast to any network.</div>
       </div>
-      <button onclick="exportNotebook()">Export History</button>
-    </div>
+    </section>
 
     <footer class="app-footer">
       <a href="https://hosuman08-netizen.github.io/legion-hub/">🎮 다른 앱 더보기</a>
@@ -142,6 +194,19 @@
       <a href="https://hosuman08-netizen.github.io/coinwallet-sim/">CoinVault</a>
     </footer>
   </div>
+
+  <!-- Sheet host -->
+  <div id="scrim" class="scrim hidden" onclick="closeSheet()"></div>
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <h3 id="sheet-title"></h3>
+      <button class="icon-btn" onclick="closeSheet()" aria-label="Close">✕</button>
+    </div>
+    <div id="sheet-body" class="sheet-body"></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
 
   <script src="script.js"></script>
 <script>window.LEGION_APP='stablelink';window.LEGION_ANALYTICS_URL='https://legion-analytics.hoyashi95.workers.dev';</script>
