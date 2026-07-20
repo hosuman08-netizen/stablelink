@@ -43,15 +43,25 @@
         <button onclick="showSettings()">Settings</button>
       </div>
 
-      <!-- Balance card — wallet, fees collected, effective fee -->
+      <!-- Balance card — wallet, effective fee, loyalty tier progress -->
       <div class="balance-card">
         <div class="bal-main">
           <span class="bal-label">Wallet</span>
           <span><strong id="balance">0.00</strong> USDC</span>
         </div>
         <div class="bal-sub">
-          <span>Fees collected <strong id="vault-balance">0.00</strong></span>
+          <span>Total fee saved <strong id="total-saved">0.00</strong></span>
           <span>Your fee <strong id="personal-rate">0.50%</strong></span>
+        </div>
+
+        <!-- Loyalty tier — visible progress toward your next lower fee -->
+        <div class="tier-block">
+          <div class="tier-row">
+            <span id="tier-name">Tier 1 · Standard</span>
+            <span id="tier-next" class="tier-next"></span>
+          </div>
+          <div class="tier-bar"><div id="tier-fill" class="tier-fill"></div></div>
+          <div id="tier-hint" class="tier-hint"></div>
         </div>
       </div>
 

@@ -56,6 +56,14 @@ function settleFlow(gross, net, fee, recipient) {
   return true;
 }
 
+// Total fee saved vs the 0.50% base rate, summed over real receipts (honest, recomputed).
+function totalFeeSaved() {
+  return money(receipts.reduce((s, r) => {
+    const baseFee = money(r.gross * 0.005);
+    return s + Math.max(0, baseFee - (r.fee || 0));
+  }, 0));
+}
+
 function updateBalanceUI() {
   const b = document.getElementById('balance');
   if (b) b.textContent = balance.toFixed(2);
@@ -64,12 +72,81 @@ function updateBalanceUI() {
   const vb = document.getElementById('vault-balance');
   if (vb) vb.textContent = vaultBalance.toFixed(2);
   const ts = document.getElementById('total-saved');
-  if (ts) ts.textContent = vaultBalance.toFixed(2) + ' USDC saved';
+  if (ts) ts.textContent = totalFeeSaved().toFixed(2);
+  renderTier();
+}
+
+// Render the loyalty tier progress bar — visible motivation for the fee-drop loop.
+let _lastTierIdx = null;
+function renderTier(animateDrop) {
+  const st = tierStatus();
+  const nameEl = document.getElementById('tier-name');
+  const nextEl = document.getElementById('tier-next');
+  const fillEl = document.getElementById('tier-fill');
+  const hintEl = document.getElementById('tier-hint');
+  if (!nameEl || !fillEl) return;
+
+  nameEl.textContent = `${st.cur.name} · ${st.fee.toFixed(2)}% fee`;
+
+  if (st.next) {
+    nextEl.textContent = `next: ${st.next.fee.toFixed(2)}%`;
+    fillEl.style.width = (st.progress * 100).toFixed(0) + '%';
+    const pct = Math.round(st.progress * 100);
+    hintEl.innerHTML = `<strong>${pct}%</strong> to ${st.next.name.split('·')[1].trim()} — voice, send, or replay to save more.`;
+  } else {
+    nextEl.textContent = 'max tier';
+    fillEl.style.width = '100%';
+    hintEl.innerHTML = `Lowest fee unlocked — you keep <strong>${(0.50 - st.fee).toFixed(2)}%</strong> more on every transfer.`;
+  }
+
+  // Pulse the bar when the user actually crosses into a new (lower-fee) tier.
+  if (animateDrop && _lastTierIdx !== null && st.idx > _lastTierIdx) {
+    fillEl.classList.remove('tier-drop');
+    void fillEl.offsetWidth; // reflow to restart animation
+    fillEl.classList.add('tier-drop');
+  }
+  _lastTierIdx = st.idx;
 }
 
 // Exact fee the execute path will charge — single source of truth (shield: display == code).
 function currentFeePct() {
   return Math.max(0.04, 0.50 - (personalRate * 0.55));
+}
+
+// Loyalty tiers — the SAME formula, just made visible so the fee-drop loop is legible.
+// Each tier is a fee band; you climb by using the app (voice/transfers/replays raise personalRate).
+// Numbers are honest: the fee shown at each tier is exactly what currentFeePct() would charge.
+const TIERS = [
+  { name: 'Tier 1 · Standard', fee: 0.50 },
+  { name: 'Tier 2 · Trusted',  fee: 0.35 },
+  { name: 'Tier 3 · Regular',  fee: 0.22 },
+  { name: 'Tier 4 · Insider',  fee: 0.12 },
+  { name: 'Tier 5 · Founder',  fee: 0.04 }
+];
+
+// Convert a target fee% back to the personalRate that produces it (inverse of currentFeePct).
+function rateForFee(feePct) {
+  return (0.50 - feePct) / 0.55;
+}
+
+// Which tier band the current fee sits in, plus progress toward the next tier.
+function tierStatus() {
+  const fee = currentFeePct();
+  // Current tier = highest tier whose fee threshold we've reached (fee <= tier.fee).
+  let idx = 0;
+  for (let i = 0; i < TIERS.length; i++) {
+    if (fee <= TIERS[i].fee + 1e-9) idx = i;
+  }
+  const cur = TIERS[idx];
+  const next = TIERS[idx + 1] || null;
+  let progress = 1;
+  if (next) {
+    const rNow = personalRate;
+    const rCur = rateForFee(cur.fee);
+    const rNext = rateForFee(next.fee);
+    progress = Math.max(0, Math.min(1, (rNow - rCur) / (rNext - rCur)));
+  }
+  return { idx, cur, next, progress, fee };
 }
 
 function recalcFee() {
@@ -136,6 +213,7 @@ function startVoiceTransfer() {
         // Loyalty grows slightly each time you use voice confirm, lowering your fee.
         personalRate = Math.min(1.8, personalRate + (surprise - 0.5) * 0.12);
         updateBalanceUI();
+        renderTier(true);
         recalcFee();
         status.textContent = `Voice captured. Your fee is now ${currentFeePct().toFixed(2)}%.`;
 
@@ -298,6 +376,7 @@ function executeTransfer() {
   }
   saveState();
   updateBalanceUI();
+  renderTier(true);
 
   // Perk 1: a voice-confirmed transfer unlocks a reduced fee for that recipient next time.
   let perkNote = '';
@@ -385,6 +464,7 @@ function reobserve(idx) {
   personalRate = Math.min(2.1, personalRate + 0.11 + (r.surprise - 0.5) * 0.07);
   saveState();
   updateBalanceUI();
+  renderTier(true);
 
   let msg = `Your effective fee dropped ${oldFee.toFixed(2)}% → ${currentFeePct().toFixed(2)}%.`;
 
