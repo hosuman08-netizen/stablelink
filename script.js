@@ -423,7 +423,11 @@ function showNotebook() {
     nb = document.createElement('div');
     nb.id = 'notebook';
     nb.className = 'section';
-    document.querySelector('.container').appendChild(nb);
+    const container = document.querySelector('.container');
+    const footer = container.querySelector('.app-footer');
+    // Insert before the footer so History renders in the main content area,
+    // not appended below the footer links.
+    container.insertBefore(nb, footer || null);
   }
   nb.classList.remove('hidden');
 
