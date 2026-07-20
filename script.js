@@ -427,12 +427,23 @@ function showNotebook() {
   }
   nb.classList.remove('hidden');
 
-  const mirrorCount = receipts.filter(r => r.mirrorSpore).length;
-  const graftCount = receipts.filter(r => r.echoGraft).length;
+  const perkCount = receipts.filter(r => r.mirrorSpore).length;
+  const savedCount = receipts.filter(r => r.echoGraft).length;
+  const saved = totalFeeSaved();
 
   let html = `<h2>📓 History</h2>
-    <p>Your effective fee: <strong>${currentFeePct().toFixed(2)}%</strong>. Fees collected: <strong>${vaultBalance.toFixed(2)} USDC</strong>. Wallet: <strong>${balance.toFixed(2)} USDC</strong></p>
-    <p><small>Loyalty perks: ${mirrorCount} • Saved recipients: ${graftCount}</small></p>`;
+    <p>Your effective fee: <strong>${currentFeePct().toFixed(2)}%</strong>. Total fee saved vs 0.50% base: <strong>${saved.toFixed(2)} USDC</strong>. Wallet: <strong>${balance.toFixed(2)} USDC</strong></p>
+    <p><small>Loyalty perks: ${perkCount} • Saved recipients: ${savedCount}</small></p>`;
+
+  // Real savings chart — cumulative fee saved vs the base rate, oldest → newest.
+  if (receipts.length >= 2) {
+    html += `<canvas id="saved-chart" width="360" height="96" class="saved-chart"></canvas>
+      <small class="chart-cap">Cumulative fee saved as your loyalty grew (oldest → newest).</small>`;
+  }
+
+  if (receipts.length === 0) {
+    html += `<div class="notebook-entry"><small>No transfers yet. Send one and it will appear here.</small></div>`;
+  }
 
   receipts.slice(0, 7).forEach((r, i) => {
     const v = r.voice ? `tone ${r.ache} / energy ${r.surprise}` : 'no voice';
@@ -448,6 +459,66 @@ function showNotebook() {
 
   html += `<button onclick="closeNotebook()">Close</button> <small>Replaying a voice note builds a little loyalty.</small>`;
   nb.innerHTML = html;
+
+  drawSavedChart();
+}
+
+// Draw the cumulative fee-saved sparkline (oldest → newest). Self-contained, honest numbers.
+function drawSavedChart() {
+  const cv = document.getElementById('saved-chart');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, pad = 8;
+
+  // Chronological order; build cumulative saved series.
+  const chrono = receipts.slice().reverse();
+  let cum = 0;
+  const pts = chrono.map(r => {
+    const baseFee = money(r.gross * 0.005);
+    cum = money(cum + Math.max(0, baseFee - (r.fee || 0)));
+    return cum;
+  });
+  if (pts.length < 2) return;
+
+  const max = Math.max(...pts, 0.01);
+  ctx.clearRect(0, 0, W, H);
+
+  const x = i => pad + (i / (pts.length - 1)) * (W - pad * 2);
+  const y = v => H - pad - (v / max) * (H - pad * 2);
+
+  // Soft area fill under the line.
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(pts[0]));
+  pts.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(pts.length - 1), H - pad);
+  ctx.lineTo(x(0), H - pad);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad, 0, H);
+  grad.addColorStop(0, 'rgba(197,164,110,0.28)');
+  grad.addColorStop(1, 'rgba(197,164,110,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Gold line.
+  ctx.beginPath();
+  pts.forEach((v, i) => { i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v)); });
+  ctx.strokeStyle = '#c5a46e';
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = 'rgba(197,164,110,0.5)';
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Endpoint dot + total label.
+  const lx = x(pts.length - 1), ly = y(pts[pts.length - 1]);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#e6c98a';
+  ctx.fill();
+  ctx.fillStyle = '#c5a46e';
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(pts[pts.length - 1].toFixed(2) + ' saved', W - pad, pad + 9);
 }
 
 function reobserve(idx) {
