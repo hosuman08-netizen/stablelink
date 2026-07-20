@@ -1,3 +1,6 @@
+
+/* LEGION_WAVE_1_session_counter */
+try{if(!sessionStorage.getItem('lw_p10_stable_f_session_counter')){sessionStorage.setItem('lw_p10_stable_f_session_counter','1');localStorage.setItem('lw_p10_stable_f_session_counter',String((+(localStorage.getItem('lw_p10_stable_f_session_counter')||0))+1));}}catch(e){}
 /* StableLink — stablecoin transfer demo.
  *
  * Fictional demo only. Simulated virtual credits — no real money, no real chain.
